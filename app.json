@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "FitForge",
+    "slug": "fitforge-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0A0F",
+    "splash": {
+      "backgroundColor": "#0A0A0F"
+    },
+    "android": {
+      "package": "com.fitforge.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0F"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FitForge needs photo access to analyse your exercise form and body composition.",
+          "cameraPermission": "FitForge needs camera access to analyse your exercise form and body composition."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0b6b2035-c179-42f8-90c1-27a80dda3481"
+      }
+    }
+  }
+}
