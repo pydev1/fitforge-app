@@ -227,6 +227,9 @@ export default function ProgressScreen() {
           )}
         </View>
 
+        {/* Strength Progress */}
+        <StrengthProgress setLogs={progress.setLogs || []} />
+
         {/* Recent Workouts */}
         <View style={s.recentCard}>
           <Text style={s.chartTitle}>Recent Sessions</Text>
@@ -295,6 +298,58 @@ export default function ProgressScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function StrengthProgress({ setLogs }) {
+  if (!setLogs.length) {
+    return (
+      <View style={s.chartCard}>
+        <Text style={s.chartTitle}>Strength Progress</Text>
+        <EmptyChart message="Log sets during workouts to track your strength gains" />
+      </View>
+    );
+  }
+
+  const byExercise = {};
+  setLogs.forEach(log => {
+    if (!byExercise[log.exerciseId]) {
+      byExercise[log.exerciseId] = { name: log.exerciseName, logs: [] };
+    }
+    byExercise[log.exerciseId].logs.push(log);
+  });
+
+  const exercises = Object.entries(byExercise)
+    .sort(([, a], [, b]) => b.logs.length - a.logs.length)
+    .slice(0, 6);
+
+  return (
+    <View style={s.chartCard}>
+      <Text style={s.chartTitle}>Strength Progress</Text>
+      {exercises.map(([exId, { name, logs }], i) => {
+        const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
+        const firstWeight = sorted[0].weight;
+        const lastWeight = sorted[sorted.length - 1].weight;
+        const best = Math.max(...logs.map(l => l.weight));
+        const delta = lastWeight - firstWeight;
+        const isLast = i === exercises.length - 1;
+        return (
+          <View key={exId} style={[sp.row, isLast && { borderBottomWidth: 0 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={sp.name} numberOfLines={1}>{name}</Text>
+              <Text style={sp.meta}>{logs.length} sets · Best {best} kg · Last {lastWeight} kg</Text>
+            </View>
+            {delta !== 0 && (
+              <View style={[sp.deltaBadge, { backgroundColor: delta > 0 ? colors.success + '20' : colors.secondary + '20' }]}>
+                <Text style={[sp.deltaText, { color: delta > 0 ? colors.success : colors.secondary }]}>
+                  {delta > 0 ? '+' : ''}{delta} kg
+                </Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -473,4 +528,15 @@ const sc = StyleSheet.create({
   value: { fontSize: 16, color: colors.text, fontWeight: '700' },
   unit: { fontSize: 10, color: colors.textSec, fontWeight: '400' },
   label: { fontSize: 9, color: colors.textMuted, marginTop: 2 },
+});
+
+const sp = StyleSheet.create({
+  row: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  name: { fontSize: 13, color: colors.text, fontWeight: '600', marginRight: 8 },
+  meta: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  deltaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  deltaText: { fontSize: 12, fontWeight: '700' },
 });

@@ -25,7 +25,7 @@ const defaultState = {
     jobType: 'desk',
   },
   generatedPlan: null,
-  progress: INITIAL_PROGRESS,
+  progress: { ...INITIAL_PROGRESS, setLogs: [] },
   chatHistory: [],
   isLoaded: false,
 };
@@ -67,6 +67,14 @@ function reducer(state, action) {
         progress: {
           ...state.progress,
           completedWorkouts: [...state.progress.completedWorkouts, action.payload],
+        },
+      };
+    case 'LOG_SET':
+      return {
+        ...state,
+        progress: {
+          ...state.progress,
+          setLogs: [...(state.progress.setLogs || []), action.payload],
         },
       };
     case 'ADD_MESSAGE':
