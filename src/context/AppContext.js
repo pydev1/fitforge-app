@@ -1,18 +1,30 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { INITIAL_PROGRESS, USER_PROFILE } from '../data/workoutData';
+import { INITIAL_PROGRESS } from '../data/workoutData';
+import { generateWorkoutPlan } from '../utils/workoutGenerator';
 
 const AppContext = createContext(null);
-const STORAGE_KEY = '@fitforge_v2';
+const STORAGE_KEY = '@fitforge_v3';
 
 const defaultState = {
   apiKey: '',
-  userName: USER_PROFILE.name,
+  isOnboarded: false,
   userProfile: {
-    height: USER_PROFILE.height,
-    weight: USER_PROFILE.weight,
-    waist: USER_PROFILE.waist,
+    name: '',
+    gender: '',
+    age: null,
+    height: null,
+    weight: null,
+    waist: null,
+    bodyType: '',
+    fitnessLevel: 'beginner',
+    goals: [],
+    equipment: [],
+    workoutDaysPerWeek: 4,
+    restDays: ['Monday', 'Wednesday', 'Friday'],
+    jobType: 'desk',
   },
+  generatedPlan: null,
   progress: INITIAL_PROGRESS,
   chatHistory: [],
   isLoaded: false,
@@ -26,25 +38,28 @@ function reducer(state, action) {
       return { ...state, isLoaded: true };
     case 'SET_API_KEY':
       return { ...state, apiKey: action.payload };
-    case 'SET_USER_NAME':
-      return { ...state, userName: action.payload };
     case 'UPDATE_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
+    case 'COMPLETE_ONBOARDING':
+      return {
+        ...state,
+        userProfile: action.payload.userProfile,
+        generatedPlan: action.payload.generatedPlan,
+        isOnboarded: true,
+      };
+    case 'REGENERATE_PLAN': {
+      const plan = generateWorkoutPlan(state.userProfile);
+      return { ...state, generatedPlan: plan };
+    }
     case 'LOG_WEIGHT':
       return {
         ...state,
-        progress: {
-          ...state.progress,
-          weight: [...state.progress.weight, action.payload],
-        },
+        progress: { ...state.progress, weight: [...state.progress.weight, action.payload] },
       };
     case 'LOG_WAIST':
       return {
         ...state,
-        progress: {
-          ...state.progress,
-          waist: [...state.progress.waist, action.payload],
-        },
+        progress: { ...state.progress, waist: [...state.progress.waist, action.payload] },
       };
     case 'LOG_WORKOUT':
       return {
@@ -71,8 +86,7 @@ export function AppProvider({ children }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const saved = JSON.parse(raw);
-          dispatch({ type: 'HYDRATE', payload: saved });
+          dispatch({ type: 'HYDRATE', payload: JSON.parse(raw) });
         } else {
           dispatch({ type: 'SET_LOADED' });
         }

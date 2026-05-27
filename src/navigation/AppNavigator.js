@@ -5,6 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
+import { useApp } from '../context/AppContext';
 
 import HomeScreen from '../screens/HomeScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
@@ -12,6 +13,7 @@ import CoachScreen from '../screens/CoachScreen';
 import PhotoScanScreen from '../screens/PhotoScanScreen';
 import ProgressScreen from '../screens/ProgressScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -41,7 +43,7 @@ function MainTabs() {
         tabBarActiveTintColor: colors.accentLight,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           const [active, inactive] = TAB_ICONS[route.name];
           return <Ionicons name={focused ? active : inactive} size={22} color={color} />;
         },
@@ -57,6 +59,20 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
+  const { state } = useApp();
+
+  if (!state.isLoaded) return null;
+
+  if (!state.isOnboarded) {
+    return (
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -64,10 +80,7 @@ export default function AppNavigator() {
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
-          options={{
-            presentation: 'modal',
-            cardStyle: { backgroundColor: colors.bg },
-          }}
+          options={{ presentation: 'modal', cardStyle: { backgroundColor: colors.bg } }}
         />
       </Stack.Navigator>
     </NavigationContainer>

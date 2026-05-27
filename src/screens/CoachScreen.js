@@ -26,17 +26,30 @@ const QUICK_PROMPTS = [
   "Progressive overload tips",
 ];
 
-const WELCOME_MESSAGE = {
-  role: 'assistant',
-  content: "Hey! I'm your FitForge AI Coach 💪\n\nI know your full profile — 172cm, 67kg, 87cm waist, home equipment, desk job. Every answer I give is tailored specifically to you.\n\nWhat can I help with today?",
-  id: 'welcome',
-};
+function buildWelcomeMessage(profile) {
+  if (!profile?.name) {
+    return "Hey! I'm your FitForge AI Coach 💪\n\nI'm here to give you personalised fitness advice. What can I help with today?";
+  }
+  const goalStr = profile.goals?.length
+    ? profile.goals[0].replace('_', ' ')
+    : 'general fitness';
+  const equipStr = profile.equipment?.length
+    ? profile.equipment.map(e => e.replace('_', ' ')).join(', ')
+    : 'bodyweight training';
+  return `Hey ${profile.name}! I'm your FitForge AI Coach 💪\n\nI know your full profile — ${profile.height ?? '?'}cm, ${profile.weight ?? '?'}kg, ${profile.fitnessLevel ?? 'beginner'} level. Your primary goal is ${goalStr} using ${equipStr}.\n\nEvery answer I give is tailored specifically to you. What can I help with today?`;
+}
 
 export default function CoachScreen({ navigation }) {
   const { state, dispatch } = useApp();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
+
+  const WELCOME_MESSAGE = {
+    role: 'assistant',
+    content: buildWelcomeMessage(state.userProfile),
+    id: 'welcome',
+  };
 
   const messages = state.chatHistory.length === 0
     ? [WELCOME_MESSAGE]
@@ -70,7 +83,7 @@ export default function CoachScreen({ navigation }) {
     try {
       const history = state.chatHistory.length === 0 ? [] : state.chatHistory;
       const allMessages = [...history, userMsg];
-      const reply = await sendChatMessage(allMessages, state.apiKey);
+      const reply = await sendChatMessage(allMessages, state.apiKey, state.userProfile);
       const aiMsg = { role: 'assistant', content: reply, id: (Date.now() + 1).toString() };
       dispatch({ type: 'ADD_MESSAGE', payload: aiMsg });
     } catch (err) {

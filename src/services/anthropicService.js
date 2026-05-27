@@ -1,34 +1,93 @@
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
-const SYSTEM_PROMPT = `You are FitForge AI Coach — a personal fitness assistant built for one specific user:
+function buildSystemPrompt(userProfile) {
+  if (!userProfile || !userProfile.name) {
+    return `You are FitForge AI Coach — a personal fitness assistant. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
+  }
+
+  const {
+    name, gender, age, height, weight, waist,
+    bodyType, fitnessLevel, goals = [], equipment = [], jobType,
+  } = userProfile;
+
+  const equipmentStr = equipment.length
+    ? equipment.map(e => e.replace('_', ' ')).join(', ')
+    : 'bodyweight only (no equipment)';
+
+  const goalsStr = goals.map(g => g.replace('_', ' ')).join(', ') || 'general fitness';
+
+  const bmi = height && weight
+    ? (weight / Math.pow(height / 100, 2)).toFixed(1)
+    : null;
+
+  const bodyTypeLabel = {
+    skinny: 'Skinny (low body weight and fat)',
+    skinny_fat: 'Skinny-fat (normal BMI but higher body fat %, especially midsection)',
+    average: 'Average build',
+    athletic: 'Athletic (muscular, low body fat)',
+    overweight: 'Overweight (higher body fat)',
+  }[bodyType] || bodyType;
+
+  const postureSection = jobType === 'desk'
+    ? '\n- Occupation: Desk job — likely has forward head posture, rounded shoulders, tight hip flexors\n- Always flag posture implications and include posture correction advice where relevant'
+    : jobType === 'active'
+    ? '\n- Occupation: Active job — generally good baseline movement'
+    : '';
+
+  return `You are FitForge AI Coach — a personal fitness assistant for ${name}.
 
 **User Profile**
-- Male | Height: 172cm | Weight: 67kg | Waist: 87cm
-- Body type: Skinny-fat (normal BMI ~22.6 but higher body fat %, especially midsection)
-- Home equipment only: Dumbbells, incline bench, resistance band
-- Occupation: Desk job — suffers from forward head posture, rounded shoulders, tight hip flexors
-- Primary goal: Body recomposition (reduce belly fat + build lean muscle simultaneously)
-- Fitness level: Beginner to intermediate
+- ${gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : 'User'} | Age: ${age ?? '?'} | Height: ${height ?? '?'}cm | Weight: ${weight ?? '?'}kg${waist ? ` | Waist: ${waist}cm` : ''}${bmi ? ` | BMI: ${bmi}` : ''}
+- Body type: ${bodyTypeLabel}
+- Fitness level: ${fitnessLevel || 'beginner'}
+- Goals: ${goalsStr}
+- Equipment: ${equipmentStr}${postureSection}
 
-**Training Split**
-- Monday: Push (Chest, Shoulders, Triceps)
-- Wednesday: Pull (Back, Biceps, Rear Delts)
-- Friday: Legs + Core
-- Daily: 10-min posture correction routine
-
-**Your Coaching Style**
+**Coaching Style**
 - Evidence-based, practical, and direct
-- Tailor every suggestion to available equipment (no gym machines)
+- Tailor every suggestion to available equipment (${equipmentStr})
 - Motivating but honest — no unrealistic promises
-- Flag posture implications whenever relevant
 - Keep responses concise and actionable
 - Use occasional emojis to stay engaging
-- When suggesting food/nutrition, keep it simple and realistic
+- For nutrition advice, keep it simple and realistic
 
-Never recommend equipment the user doesn't own. Always frame advice around the skinny-fat recomposition goal.`;
+Never recommend equipment the user doesn't own. Always align advice with their stated goals.`;
+}
 
-export async function sendChatMessage(messages, apiKey) {
+function buildPhotoPrompt(userProfile) {
+  if (!userProfile || !userProfile.name) {
+    return `Analyse this image for fitness purposes. Provide: 1. What you see, 2. Recommended exercises, 3. Posture observations, 4. One immediate action. Be practical and specific.`;
+  }
+
+  const { name, bodyType, fitnessLevel, goals = [], equipment = [], jobType } = userProfile;
+  const equipmentStr = equipment.length
+    ? equipment.map(e => e.replace('_', ' ')).join(', ')
+    : 'bodyweight only';
+  const goalsStr = goals.map(g => g.replace('_', ' ')).join(', ') || 'general fitness';
+
+  const postureContext = jobType === 'desk'
+    ? 'Has desk job — watch for forward head posture and rounded shoulders.'
+    : '';
+
+  return `Analyse this image for fitness purposes.
+
+User context:
+- ${name} | ${bodyType ? bodyType.replace('_', '-') : 'general'} body type | ${fitnessLevel || 'beginner'} level
+- Equipment: ${equipmentStr}
+- Goals: ${goalsStr}
+${postureContext}
+
+Please respond with:
+1. **What I see** — briefly describe what's in the image (body, equipment, environment, posture cues)
+2. **Recommended exercises** — 3–5 specific exercises suited to what you see + this user's profile and equipment
+3. **Posture observations** — any posture issues visible, and the #1 fix
+4. **Immediate action** — one thing to do today
+
+Keep it structured, practical, and specific to their equipment.`;
+}
+
+export async function sendChatMessage(messages, apiKey, userProfile) {
   if (!apiKey) {
     throw new Error('No API key set. Please add your Anthropic API key in Settings.');
   }
@@ -43,8 +102,8 @@ export async function sendChatMessage(messages, apiKey) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      system: buildSystemPrompt(userProfile),
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
     }),
   });
 
@@ -57,26 +116,10 @@ export async function sendChatMessage(messages, apiKey) {
   return data.content[0].text;
 }
 
-export async function analyzePhoto(base64Image, mimeType, apiKey) {
+export async function analyzePhoto(base64Image, mimeType, apiKey, userProfile) {
   if (!apiKey) {
     throw new Error('No API key set. Please add your Anthropic API key in Settings.');
   }
-
-  const userPrompt = `Analyse this image for fitness purposes.
-
-User context:
-- Skinny-fat male, 172cm / 67kg / 87cm waist
-- Home equipment: dumbbells, incline bench, resistance band
-- Desk job — has forward head posture and rounded shoulders
-- Goal: body recomposition (lose belly fat, build muscle)
-
-Please respond with:
-1. **What I see** — briefly describe what's in the image (body, equipment, environment, posture cues)
-2. **Recommended exercises** — 3–5 specific exercises suited to what you see + this user's profile and equipment
-3. **Posture observations** — any posture issues visible, and the #1 fix
-4. **Immediate action** — one thing to do today
-
-Keep it structured, practical, and specific to the home-gym setup.`;
 
   const response = await fetch(API_URL, {
     method: 'POST',
@@ -94,13 +137,9 @@ Keep it structured, practical, and specific to the home-gym setup.`;
           content: [
             {
               type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: base64Image,
-              },
+              source: { type: 'base64', media_type: mimeType, data: base64Image },
             },
-            { type: 'text', text: userPrompt },
+            { type: 'text', text: buildPhotoPrompt(userProfile) },
           ],
         },
       ],

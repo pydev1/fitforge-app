@@ -1,43 +1,121 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
 
+const BODY_TYPES = ['skinny', 'skinny_fat', 'average', 'athletic', 'overweight'];
+const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
+const GOALS_OPTIONS = ['lose_fat', 'build_muscle', 'recomposition', 'improve_posture', 'general_fitness', 'endurance'];
+const EQUIPMENT_OPTIONS = ['dumbbells', 'bench', 'resistance_band', 'pull_up_bar', 'barbell'];
+const JOB_TYPES = ['desk', 'active', 'mixed'];
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function getBmiColor(bmi) {
+  if (bmi < 18.5) return colors.info;
+  if (bmi < 25) return colors.success;
+  if (bmi < 30) return colors.warning;
+  return colors.secondary;
+}
+
+function getBmiCategory(bmi) {
+  if (bmi < 18.5) return 'Underweight';
+  if (bmi < 25) return 'Normal';
+  if (bmi < 30) return 'Overweight';
+  return 'Obese';
+}
+
+function prettyLabel(str) {
+  return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function SettingsScreen({ navigation }) {
   const { state, dispatch } = useApp();
+  const p = state.userProfile;
 
-  const [name, setName] = useState(state.userName);
   const [apiKey, setApiKey] = useState(state.apiKey);
-  const [height, setHeight] = useState(String(state.userProfile.height));
-  const [weight, setWeight] = useState(String(state.userProfile.weight));
-  const [waist, setWaist] = useState(String(state.userProfile.waist));
   const [showKey, setShowKey] = useState(false);
 
+  // Basic info
+  const [name, setName] = useState(p.name || '');
+  const [gender, setGender] = useState(p.gender || '');
+  const [age, setAge] = useState(p.age ? String(p.age) : '');
+  const [height, setHeight] = useState(p.height ? String(p.height) : '');
+  const [weight, setWeight] = useState(p.weight ? String(p.weight) : '');
+  const [waist, setWaist] = useState(p.waist ? String(p.waist) : '');
+
+  // Training profile
+  const [bodyType, setBodyType] = useState(p.bodyType || '');
+  const [fitnessLevel, setFitnessLevel] = useState(p.fitnessLevel || 'beginner');
+  const [goals, setGoals] = useState(p.goals || []);
+  const [equipment, setEquipment] = useState(p.equipment || []);
+  const [daysPerWeek, setDaysPerWeek] = useState(p.workoutDaysPerWeek || 4);
+  const [restDays, setRestDays] = useState(p.restDays || ['Monday', 'Wednesday', 'Friday']);
+  const [jobType, setJobType] = useState(p.jobType || 'desk');
+
+  function toggleArr(arr, setArr, val) {
+    setArr(arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val]);
+  }
+
   function save() {
-    if (name.trim()) dispatch({ type: 'SET_USER_NAME', payload: name.trim() });
     dispatch({ type: 'SET_API_KEY', payload: apiKey.trim() });
-    const h = parseFloat(height);
-    const w = parseFloat(weight);
-    const wst = parseFloat(waist);
-    if (!isNaN(h) && !isNaN(w) && !isNaN(wst)) {
-      dispatch({ type: 'UPDATE_PROFILE', payload: { height: h, weight: w, waist: wst } });
-    }
-    Alert.alert('Saved!', 'Your settings have been updated.', [
+    const updatedProfile = {
+      ...p,
+      name: name.trim() || p.name,
+      gender,
+      age: parseInt(age) || p.age,
+      height: parseFloat(height) || p.height,
+      weight: parseFloat(weight) || p.weight,
+      waist: waist ? parseFloat(waist) : p.waist,
+      bodyType,
+      fitnessLevel,
+      goals,
+      equipment,
+      workoutDaysPerWeek: daysPerWeek,
+      restDays,
+      jobType,
+    };
+    dispatch({ type: 'UPDATE_PROFILE', payload: updatedProfile });
+    Alert.alert('Saved!', 'Your profile has been updated.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   }
 
-  const bmi = (parseFloat(weight) / Math.pow(parseFloat(height) / 100, 2));
+  function regeneratePlan() {
+    Alert.alert(
+      'Regenerate Workout Plan',
+      'This will rebuild your entire workout plan using your current profile. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Regenerate',
+          onPress: () => {
+            const updatedProfile = {
+              ...p,
+              name: name.trim() || p.name,
+              gender, age: parseInt(age) || p.age,
+              height: parseFloat(height) || p.height,
+              weight: parseFloat(weight) || p.weight,
+              waist: waist ? parseFloat(waist) : p.waist,
+              bodyType, fitnessLevel, goals, equipment,
+              workoutDaysPerWeek: daysPerWeek, restDays, jobType,
+            };
+            dispatch({ type: 'UPDATE_PROFILE', payload: updatedProfile });
+            dispatch({ type: 'REGENERATE_PLAN' });
+            Alert.alert('Plan Updated! 🎉', 'Your new workout plan is ready.');
+          },
+        },
+      ],
+    );
+  }
+
+  const bmi = height && weight
+    ? parseFloat(weight) / Math.pow(parseFloat(height) / 100, 2)
+    : null;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -53,11 +131,9 @@ export default function SettingsScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* API Key Section */}
+        {/* API Key */}
         <Section title="Anthropic API Key" icon="key-outline">
-          <Text style={s.sectionNote}>
-            Required to use the AI Coach and Photo Scan features. Get your key at console.anthropic.com.
-          </Text>
+          <Text style={s.note}>Required for AI Coach and Photo Scan. Get yours at console.anthropic.com</Text>
           <View style={s.keyRow}>
             <TextInput
               style={[s.input, { flex: 1 }]}
@@ -73,33 +149,42 @@ export default function SettingsScreen({ navigation }) {
               <Ionicons name={showKey ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSec} />
             </TouchableOpacity>
           </View>
-          {apiKey ? (
-            <View style={s.keyStatus}>
-              <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-              <Text style={s.keyStatusText}>API key is set</Text>
-            </View>
-          ) : (
-            <View style={s.keyStatus}>
-              <Ionicons name="warning-outline" size={14} color={colors.warning} />
-              <Text style={[s.keyStatusText, { color: colors.warning }]}>No API key — AI features disabled</Text>
-            </View>
-          )}
+          <View style={s.keyStatus}>
+            <Ionicons name={apiKey ? 'checkmark-circle' : 'warning-outline'} size={14} color={apiKey ? colors.success : colors.warning} />
+            <Text style={[s.keyStatusText, { color: apiKey ? colors.success : colors.warning }]}>
+              {apiKey ? 'API key is set' : 'No API key — AI features disabled'}
+            </Text>
+          </View>
         </Section>
 
-        {/* Profile Section */}
-        <Section title="Your Profile" icon="person-outline">
+        {/* Basic Info */}
+        <Section title="Personal Info" icon="person-outline">
           <Field label="Display Name" value={name} onChange={setName} placeholder="Your name" />
-          <View style={s.row}>
+          <Label text="Gender" />
+          <View style={s.chipRow}>
+            {['male', 'female', 'other'].map(g => (
+              <SelectChip key={g} label={prettyLabel(g)} selected={gender === g} onPress={() => setGender(g)} />
+            ))}
+          </View>
+          <View style={s.row2}>
             <View style={{ flex: 1 }}>
-              <Field label="Height (cm)" value={height} onChange={setHeight} placeholder="172" numeric />
+              <Field label="Age" value={age} onChange={setAge} placeholder="25" numeric />
             </View>
             <View style={{ width: 12 }} />
             <View style={{ flex: 1 }}>
-              <Field label="Weight (kg)" value={weight} onChange={setWeight} placeholder="67" numeric />
+              <Field label="Height (cm)" value={height} onChange={setHeight} placeholder="172" numeric />
             </View>
           </View>
-          <Field label="Waist (cm)" value={waist} onChange={setWaist} placeholder="87" numeric />
-          {!isNaN(bmi) && (
+          <View style={s.row2}>
+            <View style={{ flex: 1 }}>
+              <Field label="Weight (kg)" value={weight} onChange={setWeight} placeholder="70" numeric />
+            </View>
+            <View style={{ width: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Field label="Waist (cm)" value={waist} onChange={setWaist} placeholder="80" numeric />
+            </View>
+          </View>
+          {bmi && !isNaN(bmi) && (
             <View style={s.bmiRow}>
               <Text style={s.bmiLabel}>BMI: </Text>
               <Text style={[s.bmiValue, { color: getBmiColor(bmi) }]}>{bmi.toFixed(1)}</Text>
@@ -108,18 +193,85 @@ export default function SettingsScreen({ navigation }) {
           )}
         </Section>
 
-        {/* Your Setup */}
-        <Section title="Your Setup" icon="barbell-outline">
-          <InfoRow label="Equipment" value="Dumbbells · Incline Bench · Resistance Band" />
-          <InfoRow label="Body Type" value="Skinny-Fat (recomposition focus)" />
-          <InfoRow label="Job Type" value="Desk Job (posture correction included)" />
-          <InfoRow label="Goal" value="Body recomposition — lose belly fat, build muscle" />
-          <Text style={s.setupNote}>
-            These are pre-configured for your profile. The AI coach and workouts are tailored to these details.
-          </Text>
+        {/* Training Profile */}
+        <Section title="Training Profile" icon="barbell-outline">
+          <Label text="Body Type" />
+          <View style={s.chipRow}>
+            {BODY_TYPES.map(bt => (
+              <SelectChip key={bt} label={prettyLabel(bt)} selected={bodyType === bt} onPress={() => setBodyType(bt)} small />
+            ))}
+          </View>
+
+          <Label text="Fitness Level" />
+          <View style={s.chipRow}>
+            {FITNESS_LEVELS.map(fl => (
+              <SelectChip key={fl} label={prettyLabel(fl)} selected={fitnessLevel === fl} onPress={() => setFitnessLevel(fl)} />
+            ))}
+          </View>
+
+          <Label text="Goals (first = primary)" />
+          <View style={s.chipRow}>
+            {GOALS_OPTIONS.map(g => (
+              <SelectChip key={g} label={prettyLabel(g)} selected={goals.includes(g)} onPress={() => toggleArr(goals, setGoals, g)} small />
+            ))}
+          </View>
+
+          <Label text="Equipment" />
+          <View style={s.chipRow}>
+            {EQUIPMENT_OPTIONS.map(eq => (
+              <SelectChip key={eq} label={prettyLabel(eq)} selected={equipment.includes(eq)} onPress={() => toggleArr(equipment, setEquipment, eq)} small />
+            ))}
+          </View>
+
+          <Label text="Job Type" />
+          <View style={s.chipRow}>
+            {JOB_TYPES.map(jt => (
+              <SelectChip key={jt} label={prettyLabel(jt)} selected={jobType === jt} onPress={() => setJobType(jt)} />
+            ))}
+          </View>
         </Section>
 
-        {/* App Info */}
+        {/* Schedule */}
+        <Section title="Schedule" icon="calendar-outline">
+          <Label text="Training Days Per Week" />
+          <View style={s.chipRow}>
+            {[3, 4, 5, 6].map(n => (
+              <TouchableOpacity
+                key={n}
+                style={[s.numChip, daysPerWeek === n && s.numChipActive]}
+                onPress={() => setDaysPerWeek(n)}
+              >
+                <Text style={[s.numChipText, daysPerWeek === n && s.numChipTextActive]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Label text="Rest Days" />
+          <View style={s.chipRow}>
+            {ALL_DAYS.map(day => (
+              <TouchableOpacity
+                key={day}
+                style={[s.dayChip, restDays.includes(day) && s.dayChipRest]}
+                onPress={() => toggleArr(restDays, setRestDays, day)}
+              >
+                <Text style={[s.dayChipText, restDays.includes(day) && s.dayChipTextRest]}>
+                  {day.slice(0, 3)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Section>
+
+        {/* Regenerate Plan */}
+        <View style={{ marginHorizontal: 16, marginTop: 20 }}>
+          <TouchableOpacity style={s.regenBtn} onPress={regeneratePlan} activeOpacity={0.85}>
+            <Ionicons name="refresh-circle" size={20} color={colors.white} style={{ marginRight: 8 }} />
+            <Text style={s.regenBtnText}>Regenerate Workout Plan</Text>
+          </TouchableOpacity>
+          <Text style={s.regenNote}>Rebuilds your entire plan from your updated profile settings above.</Text>
+        </View>
+
+        {/* About */}
         <Section title="About" icon="information-circle-outline">
           <InfoRow label="App" value="FitForge" />
           <InfoRow label="AI Model" value="Claude claude-sonnet-4-6 (Anthropic)" />
@@ -132,6 +284,8 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
+/* ─── Sub-components ────────────────────────────────────────────── */
+
 function Section({ title, icon, children }) {
   return (
     <View style={ss.section}>
@@ -142,6 +296,10 @@ function Section({ title, icon, children }) {
       <View style={ss.sectionBody}>{children}</View>
     </View>
   );
+}
+
+function Label({ text, style }) {
+  return <Text style={[f.label, { marginTop: 8 }, style]}>{text}</Text>;
 }
 
 function Field({ label, value, onChange, placeholder, numeric }) {
@@ -162,6 +320,18 @@ function Field({ label, value, onChange, placeholder, numeric }) {
   );
 }
 
+function SelectChip({ label, selected, onPress, small }) {
+  return (
+    <TouchableOpacity
+      style={[f.chip, selected && f.chipActive, small && f.chipSmall]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={[f.chipText, selected && f.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 function InfoRow({ label, value }) {
   return (
     <View style={ir.row}>
@@ -171,155 +341,95 @@ function InfoRow({ label, value }) {
   );
 }
 
-function getBmiColor(bmi) {
-  if (bmi < 18.5) return colors.info;
-  if (bmi < 25) return colors.success;
-  if (bmi < 30) return colors.warning;
-  return colors.secondary;
-}
-
-function getBmiCategory(bmi) {
-  if (bmi < 18.5) return 'Underweight';
-  if (bmi < 25) return 'Normal';
-  if (bmi < 30) return 'Overweight';
-  return 'Obese';
-}
+/* ─── Styles ─────────────────────────────────────────────────────── */
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border,
   },
   title: { fontSize: 18, color: colors.text, fontWeight: '700' },
-  saveBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-  },
-  saveBtnText: { fontSize: 13, color: colors.white, fontWeight: '700' },
-  sectionNote: {
-    fontSize: 12,
-    color: colors.textSec,
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  keyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  saveBtn: { backgroundColor: colors.accent, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8 },
+  saveBtnText: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  note: { fontSize: 12, color: colors.textSec, lineHeight: 18, marginBottom: 12 },
+  keyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
-    backgroundColor: colors.bg,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 13,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    fontFamily: 'monospace',
+    backgroundColor: colors.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 13, color: colors.text, borderWidth: 1, borderColor: colors.border, fontFamily: 'monospace',
   },
   eyeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: 44, height: 44, borderRadius: 12, backgroundColor: colors.bg,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border,
   },
-  keyStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  keyStatusText: { fontSize: 12, color: colors.success },
-  row: { flexDirection: 'row' },
+  keyStatus: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  keyStatusText: { fontSize: 12 },
+  row2: { flexDirection: 'row' },
   bmiRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-    backgroundColor: colors.bg,
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    flexDirection: 'row', alignItems: 'center', marginTop: 8,
+    backgroundColor: colors.bg, borderRadius: 10, padding: 10,
+    borderWidth: 1, borderColor: colors.border,
   },
   bmiLabel: { fontSize: 13, color: colors.textSec },
   bmiValue: { fontSize: 14, fontWeight: '700' },
   bmiCat: { fontSize: 13, color: colors.textSec },
-  setupNote: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 10,
-    lineHeight: 17,
-    fontStyle: 'italic',
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  numChip: {
+    width: 52, height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
   },
+  numChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  numChipText: { fontSize: 18, color: colors.textSec, fontWeight: '700' },
+  numChipTextActive: { color: '#fff' },
+  dayChip: {
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
+  },
+  dayChipRest: { backgroundColor: colors.accentDim + '40', borderColor: colors.accent },
+  dayChipText: { fontSize: 12, color: colors.textSec, fontWeight: '600' },
+  dayChipTextRest: { color: colors.accentLight },
+  regenBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accentDim, borderRadius: 14, paddingVertical: 14,
+    borderWidth: 1, borderColor: colors.accent,
+  },
+  regenBtnText: { fontSize: 14, color: '#fff', fontWeight: '700' },
+  regenNote: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 16 },
 });
 
 const ss = StyleSheet.create({
-  section: {
-    marginHorizontal: 16,
-    marginTop: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
+  section: { marginHorizontal: 16, marginTop: 20 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   sectionTitle: { fontSize: 13, color: colors.textSec, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  sectionBody: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+  sectionBody: { backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border },
 });
 
 const f = StyleSheet.create({
   wrap: { marginBottom: 12 },
   label: { fontSize: 12, color: colors.textSec, marginBottom: 6, fontWeight: '600' },
   input: {
-    backgroundColor: colors.bg,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 14,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.border,
   },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
+  },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipSmall: { paddingHorizontal: 10, paddingVertical: 6 },
+  chipText: { fontSize: 12, color: colors.textSec, fontWeight: '600' },
+  chipTextActive: { color: '#fff' },
 });
 
 const ir = StyleSheet.create({
-  row: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
+  row: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   label: { fontSize: 11, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
   value: { fontSize: 13, color: colors.text },
 });

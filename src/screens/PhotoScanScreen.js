@@ -84,7 +84,7 @@ export default function PhotoScanScreen({ navigation }) {
     setAnalyzing(true);
     setResult(null);
     try {
-      const text = await analyzePhoto(imageBase64, mimeType, state.apiKey);
+      const text = await analyzePhoto(imageBase64, mimeType, state.apiKey, state.userProfile);
       setResult(text);
     } catch (err) {
       Alert.alert('Analysis failed', err.message || 'Something went wrong. Check your API key.');
