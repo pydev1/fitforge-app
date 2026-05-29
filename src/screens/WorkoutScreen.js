@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,11 +17,39 @@ function getTodayKey() {
   return DAYS_ORDER[d === 0 ? 6 : d - 1];
 }
 
+// Round to nearest 0.5 (dumbbell increments)
+function roundWeight(w) {
+  return Math.round(w * 2) / 2;
+}
+
+function suggestWeight(weight, feedback) {
+  const w = parseFloat(weight);
+  if (!w || !feedback || feedback === 'good') return weight;
+  const factor = feedback === 'easy' ? 1.075 : 0.925; // +7.5% or -7.5%
+  const suggested = roundWeight(w * factor);
+  return suggested > 0 ? String(suggested) : weight;
+}
+
+function getFeedbackColor(feedback) {
+  if (feedback === 'easy') return colors.success;
+  if (feedback === 'good') return colors.info;
+  if (feedback === 'hard') return colors.secondary;
+  return colors.textMuted;
+}
+
+function getFeedbackIcon(feedback) {
+  if (feedback === 'easy') return 'trending-up';
+  if (feedback === 'good') return 'checkmark-circle';
+  if (feedback === 'hard') return 'trending-down';
+  return 'ellipse-outline';
+}
+
 export default function WorkoutScreen({ route }) {
   const { state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState(0);
   const [expandedId, setExpandedId] = useState(null);
   const [infoExercise, setInfoExercise] = useState(null);
+  const [sessionSets, setSessionSets] = useState({});
 
   useEffect(() => {
     if (route?.params?.tab === 'posture') setActiveTab(2);
@@ -30,6 +59,66 @@ export default function WorkoutScreen({ route }) {
   const todayKey = getTodayKey();
   const todayWorkoutId = generatedPlan?.schedule?.[todayKey] ?? null;
   const todayWorkout = todayWorkoutId ? generatedPlan?.workouts?.[todayWorkoutId] : null;
+
+  // Initialise set tracking from previous session of same workout type
+  useEffect(() => {
+    if (!todayWorkout?.exercises) return;
+    const prevSession = [...(progress.completedWorkouts || [])]
+      .reverse()
+      .find(w => w.type === todayWorkoutId && w.exercises?.length);
+
+    const initial = {};
+    todayWorkout.exercises.forEach(ex => {
+      const prevEx = prevSession?.exercises?.find(e => e.id === ex.id);
+      // Use last set's weight from previous session as starting suggestion
+      const prevSets = prevEx?.sets || [];
+      const prevWeights = prevSets.map(s => s.weight).filter(Boolean);
+      const lastWeight = prevWeights.length
+        ? String(prevWeights[prevWeights.length - 1])
+        : '';
+      initial[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
+        weight: i === 0 ? lastWeight : '',
+        feedback: null,
+        completed: false,
+        suggested: i === 0 && !!lastWeight,
+      }));
+    });
+    setSessionSets(initial);
+  }, [todayWorkoutId]);
+
+  function handleSetUpdate(exerciseId, setIdx, field, value) {
+    setSessionSets(prev => {
+      const sets = [...(prev[exerciseId] || [])];
+      sets[setIdx] = { ...sets[setIdx], [field]: value };
+
+      // When feedback is given, auto-suggest next set weight
+      if (field === 'feedback' && setIdx + 1 < sets.length) {
+        const currentWeight = sets[setIdx].weight;
+        const nextWeight = suggestWeight(currentWeight, value);
+        if (nextWeight !== sets[setIdx + 1].weight) {
+          sets[setIdx + 1] = {
+            ...sets[setIdx + 1],
+            weight: nextWeight,
+            suggested: true,
+          };
+        }
+      }
+      return { ...prev, [exerciseId]: sets };
+    });
+  }
+
+  function getPrevSessionRef(exerciseId) {
+    const prevSession = [...(progress.completedWorkouts || [])]
+      .reverse()
+      .find(w => w.type === todayWorkoutId && w.exercises?.length);
+    if (!prevSession) return null;
+    const prevEx = prevSession?.exercises?.find(e => e.id === exerciseId);
+    if (!prevEx?.sets?.length) return null;
+    const weights = prevEx.sets.map(s => s.weight).filter(Boolean);
+    if (!weights.length) return null;
+    const avg = roundWeight(weights.reduce((a, b) => a + b, 0) / weights.length);
+    return { avg, sets: prevEx.sets.length, date: prevSession.date };
+  }
 
   const totalDays = generatedPlan
     ? Object.values(generatedPlan.schedule).filter(Boolean).length
@@ -42,7 +131,20 @@ export default function WorkoutScreen({ route }) {
       Alert.alert('Already logged', "Today's session is already marked as complete!");
       return;
     }
-    dispatch({ type: 'LOG_WORKOUT', payload: { date, type: todayWorkoutId } });
+    const exerciseLogs = (todayWorkout?.exercises || []).map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      sets: (sessionSets[ex.id] || []).map((s, i) => ({
+        setNum: i + 1,
+        weight: parseFloat(s.weight) || null,
+        feedback: s.feedback,
+        completed: s.completed,
+      })),
+    }));
+    dispatch({
+      type: 'LOG_WORKOUT',
+      payload: { date, type: todayWorkoutId, exercises: exerciseLogs },
+    });
     Alert.alert('Session Complete! 💪', 'Great work — logged to your progress tracker.');
   }
 
@@ -67,29 +169,37 @@ export default function WorkoutScreen({ route }) {
         ))}
       </View>
 
-      <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
-        {activeTab === 0 && (
-          <TodayTab
-            workout={todayWorkout}
-            dayName={todayKey}
-            expandedId={expandedId}
-            setExpandedId={setExpandedId}
-            onComplete={markComplete}
-            completedWorkouts={progress.completedWorkouts}
-            onInfo={setInfoExercise}
-          />
-        )}
-        {activeTab === 1 && (
-          <WeeklyTab
-            generatedPlan={generatedPlan}
-            completedWorkouts={progress.completedWorkouts}
-          />
-        )}
-        {activeTab === 2 && (
-          <PostureGuideTab expandedId={expandedId} setExpandedId={setExpandedId} />
-        )}
-        <View style={{ height: 24 }} />
-      </ScrollView>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {activeTab === 0 && (
+            <TodayTab
+              workout={todayWorkout}
+              dayName={todayKey}
+              expandedId={expandedId}
+              setExpandedId={setExpandedId}
+              onComplete={markComplete}
+              completedWorkouts={progress.completedWorkouts}
+              onInfo={setInfoExercise}
+              sessionSets={sessionSets}
+              onSetUpdate={handleSetUpdate}
+              getPrevRef={getPrevSessionRef}
+            />
+          )}
+          {activeTab === 1 && (
+            <WeeklyTab
+              generatedPlan={generatedPlan}
+              completedWorkouts={progress.completedWorkouts}
+            />
+          )}
+          {activeTab === 2 && (
+            <PostureGuideTab expandedId={expandedId} setExpandedId={setExpandedId} />
+          )}
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ExerciseInfoModal exercise={infoExercise} onClose={() => setInfoExercise(null)} />
     </SafeAreaView>
@@ -98,7 +208,11 @@ export default function WorkoutScreen({ route }) {
 
 /* ─── Today Tab ─────────────────────────────────────────────────── */
 
-function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo }) {
+function TodayTab({
+  workout, dayName, expandedId, setExpandedId,
+  onComplete, completedWorkouts, onInfo,
+  sessionSets, onSetUpdate, getPrevRef,
+}) {
   const today = new Date().toISOString().split('T')[0];
   const isDone = completedWorkouts.some(w => w.date === today);
 
@@ -111,12 +225,18 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         <View style={s.restTip}>
           <Ionicons name="information-circle-outline" size={16} color={colors.info} style={{ marginRight: 8 }} />
           <Text style={s.restTipText}>
-            Use today for a 10-min walk, light stretching, or the Posture Guide routine. Recovery is part of the programme.
+            Use today for a 10-min walk, light stretching, or the Posture Guide routine.
           </Text>
         </View>
       </View>
     );
   }
+
+  const totalSets = (workout.exercises || []).reduce((a, ex) => a + ex.sets, 0);
+  const completedSets = Object.values(sessionSets).reduce(
+    (a, sets) => a + sets.filter(s => s.completed).length, 0
+  );
+  const progress = totalSets > 0 ? completedSets / totalSets : 0;
 
   return (
     <View style={{ paddingHorizontal: 16 }}>
@@ -132,15 +252,23 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         </View>
       </View>
 
+      {/* Session progress bar */}
+      {totalSets > 0 && (
+        <View style={s.progressBar}>
+          <View style={s.progressTrack}>
+            <View style={[s.progressFill, { width: `${progress * 100}%`, backgroundColor: workout.color }]} />
+          </View>
+          <Text style={s.progressLabel}>{completedSets} / {totalSets} sets done</Text>
+        </View>
+      )}
+
       {workout.postureWarmup?.length > 0 && (
         <PostureBlock
           title="Posture Warm-Up"
           subtitle="5 min · do this before you start"
-          icon="body"
-          iconColor={colors.info}
+          icon="body" iconColor={colors.info}
           items={workout.postureWarmup}
-          expandedId={expandedId}
-          setExpandedId={setExpandedId}
+          expandedId={expandedId} setExpandedId={setExpandedId}
           blockColor={colors.info}
         />
       )}
@@ -154,7 +282,13 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
           onToggle={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
           accentColor={workout.color}
           onInfo={() => onInfo(ex)}
+<<<<<<< HEAD
           isToday
+=======
+          sets={sessionSets[ex.id] || []}
+          onSetUpdate={(idx, field, val) => onSetUpdate(ex.id, idx, field, val)}
+          prevRef={getPrevRef(ex.id)}
+>>>>>>> 15f82f6 (feat: per-set weight tracking with smart suggestions)
         />
       ))}
 
@@ -162,11 +296,9 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         <PostureBlock
           title="Posture Cooldown"
           subtitle="5 min · finish every session with this"
-          icon="leaf"
-          iconColor={colors.success}
+          icon="leaf" iconColor={colors.success}
           items={workout.postureCooldown}
-          expandedId={expandedId}
-          setExpandedId={setExpandedId}
+          expandedId={expandedId} setExpandedId={setExpandedId}
           blockColor={colors.success}
         />
       )}
@@ -179,6 +311,238 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color="#fff" />
         <Text style={s.completeBtnText}>{isDone ? 'Session Logged ✓' : 'Mark as Complete'}</Text>
       </TouchableOpacity>
+    </View>
+  );
+}
+
+/* ─── Exercise Card ─────────────────────────────────────────────── */
+
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef }) {
+  const completedCount = sets.filter(s => s.completed).length;
+  const allDone = completedCount === sets.length && sets.length > 0;
+
+  return (
+    <View style={[s.exCard, allDone && { borderColor: colors.success + '70' }]}>
+      <TouchableOpacity style={s.exCardTop} onPress={onToggle} activeOpacity={0.8}>
+        <View style={[s.exColorBar, { backgroundColor: allDone ? colors.success : accentColor }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.exName}>{exercise.name}</Text>
+          <View style={s.exMeta}>
+            <Chip text={`${exercise.sets} sets`} />
+            <Chip text={exercise.reps} />
+            <Chip text={`Rest ${exercise.rest}`} />
+            {allDone && (
+              <View style={[s.chip, { backgroundColor: colors.success + '25', borderColor: colors.success + '50' }]}>
+                <Text style={[s.chipText, { color: colors.success }]}>Done ✓</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        {prevRef && (
+          <Text style={s.prevWeightBadge}>{prevRef.avg}kg</Text>
+        )}
+        <TouchableOpacity
+          style={s.infoBtn}
+          onPress={e => { e.stopPropagation?.(); onInfo(); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="information-circle-outline" size={22} color={colors.info} />
+        </TouchableOpacity>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} style={{ marginLeft: 2 }} />
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={s.exExpanded}>
+          {/* Exercise details */}
+          <View style={s.exDetails}>
+            <DetailRow icon="body-outline" label="Muscles" value={exercise.muscles} />
+            <DetailRow icon="construct-outline" label="Equipment" value={exercise.equipment} />
+            <DetailRow icon="bulb-outline" label="Form Tip" value={exercise.tips} />
+            {exercise.postureNote && (
+              <View style={s.postureNote}>
+                <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Set tracker */}
+          <SetTracker
+            sets={sets}
+            exercise={exercise}
+            onSetUpdate={onSetUpdate}
+            prevRef={prevRef}
+            accentColor={accentColor}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ─── Set Tracker ───────────────────────────────────────────────── */
+
+function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor }) {
+  return (
+    <View style={st.container}>
+      <View style={st.header}>
+        <View style={st.headerLeft}>
+          <Ionicons name="barbell" size={14} color={accentColor} style={{ marginRight: 6 }} />
+          <Text style={[st.headerTitle, { color: accentColor }]}>TRACK SETS</Text>
+        </View>
+        {prevRef && (
+          <Text style={st.prevRef}>
+            Last session: {prevRef.avg} kg × {prevRef.sets} sets
+          </Text>
+        )}
+      </View>
+
+      {/* Column labels */}
+      <View style={st.colRow}>
+        <Text style={[st.colLabel, { width: 42 }]}>SET</Text>
+        <Text style={[st.colLabel, { flex: 1 }]}>WEIGHT</Text>
+        <Text style={[st.colLabel, { width: 70 }]}>FEEL</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
+      {sets.map((set, i) => (
+        <SetRow
+          key={i}
+          setNum={i + 1}
+          set={set}
+          isNext={i === sets.filter(s => s.completed).length}
+          onUpdate={(field, val) => onSetUpdate(i, field, val)}
+          accentColor={accentColor}
+        />
+      ))}
+
+      <View style={st.legend}>
+        <LegendItem color={colors.success} label="Easy → weight goes up next set" />
+        <LegendItem color={colors.info}    label="Good → weight stays" />
+        <LegendItem color={colors.secondary} label="Hard → weight drops next set" />
+      </View>
+    </View>
+  );
+}
+
+function LegendItem({ color, label }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
+      <Text style={{ fontSize: 10, color: colors.textMuted }}>{label}</Text>
+    </View>
+  );
+}
+
+/* ─── Set Row ───────────────────────────────────────────────────── */
+
+function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
+  return (
+    <View>
+      <View style={[
+        sr.row,
+        set.completed && sr.rowDone,
+        isNext && !set.completed && sr.rowActive,
+      ]}>
+        {/* Set number */}
+        <View style={[sr.setNumBadge, set.completed && { backgroundColor: colors.success + '30' }]}>
+          <Text style={[sr.setNum, set.completed && { color: colors.success }]}>{setNum}</Text>
+        </View>
+
+        {/* Weight input */}
+        <View style={{ flex: 1, marginHorizontal: 8 }}>
+          {set.suggested && !set.completed && (
+            <Text style={sr.suggestedLabel}>suggested</Text>
+          )}
+          <View style={sr.weightRow}>
+            <TextInput
+              style={[sr.weightInput, set.completed && sr.weightInputDone]}
+              value={set.weight}
+              onChangeText={val => onUpdate('weight', val.replace(/[^0-9.]/g, ''))}
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+              editable={!set.completed}
+              selectTextOnFocus
+            />
+            <Text style={sr.kgLabel}>kg</Text>
+          </View>
+        </View>
+
+        {/* Feedback display (after done) */}
+        <View style={{ width: 70, alignItems: 'center' }}>
+          {set.completed && set.feedback ? (
+            <View style={[sr.fbDoneChip, { backgroundColor: getFeedbackColor(set.feedback) + '25', borderColor: getFeedbackColor(set.feedback) + '60' }]}>
+              <Ionicons name={getFeedbackIcon(set.feedback)} size={12} color={getFeedbackColor(set.feedback)} />
+              <Text style={[sr.fbDoneText, { color: getFeedbackColor(set.feedback) }]}>
+                {set.feedback.charAt(0).toUpperCase() + set.feedback.slice(1)}
+              </Text>
+            </View>
+          ) : !set.completed ? (
+            <Text style={{ fontSize: 11, color: colors.textMuted }}>—</Text>
+          ) : (
+            <Text style={{ fontSize: 11, color: colors.textMuted }}>rate it</Text>
+          )}
+        </View>
+
+        {/* Complete toggle */}
+        <TouchableOpacity
+          style={sr.checkBtn}
+          onPress={() => {
+            if (set.completed) {
+              // Uncomplete — clear feedback too
+              onUpdate('completed', false);
+              onUpdate('feedback', null);
+            } else {
+              if (!set.weight) {
+                // Allow completing without weight (bodyweight)
+              }
+              onUpdate('completed', true);
+            }
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={set.completed ? 'checkmark-circle' : 'checkmark-circle-outline'}
+            size={28}
+            color={set.completed ? colors.success : isNext ? accentColor : colors.border}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* Feedback prompt — appears inline below the row when set just completed */}
+      {set.completed && !set.feedback && (
+        <View style={sr.feedbackPromptRow}>
+          <Text style={sr.feedbackPromptLabel}>How was that set?</Text>
+          {['easy', 'good', 'hard'].map(f => (
+            <TouchableOpacity
+              key={f}
+              style={[sr.fbBtn, { borderColor: getFeedbackColor(f), backgroundColor: getFeedbackColor(f) + '18' }]}
+              onPress={() => onUpdate('feedback', f)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name={getFeedbackIcon(f)} size={14} color={getFeedbackColor(f)} />
+              <Text style={[sr.fbBtnText, { color: getFeedbackColor(f) }]}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Auto-suggestion hint */}
+      {set.completed && set.feedback && set.feedback !== 'good' && (
+        <View style={sr.suggestionHint}>
+          <Ionicons
+            name={set.feedback === 'easy' ? 'trending-up' : 'trending-down'}
+            size={12}
+            color={getFeedbackColor(set.feedback)}
+            style={{ marginRight: 4 }}
+          />
+          <Text style={[sr.suggestionHintText, { color: getFeedbackColor(set.feedback) }]}>
+            {set.feedback === 'easy' ? 'Weight increased for next set' : 'Weight reduced for next set'}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -219,8 +583,6 @@ function PostureBlock({ title, subtitle, icon, iconColor, items, expandedId, set
   );
 }
 
-/* ─── Section Label ─────────────────────────────────────────────── */
-
 function SectionLabel({ text, icon, color }) {
   return (
     <View style={[s.sectionLabel, { borderLeftColor: color }]}>
@@ -230,6 +592,7 @@ function SectionLabel({ text, icon, color }) {
   );
 }
 
+<<<<<<< HEAD
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
 function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday }) {
@@ -271,6 +634,8 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
   );
 }
 
+=======
+>>>>>>> 15f82f6 (feat: per-set weight tracking with smart suggestions)
 function Chip({ text }) {
   return (
     <View style={s.chip}>
@@ -295,7 +660,6 @@ function DetailRow({ icon, label, value }) {
 
 function WeeklyTab({ generatedPlan, completedWorkouts }) {
   const todayKey = getTodayKey();
-
   if (!generatedPlan) {
     return (
       <View style={{ padding: 24, alignItems: 'center' }}>
@@ -303,7 +667,6 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
       </View>
     );
   }
-
   const { schedule, workouts } = generatedPlan;
   const trainingCount = Object.values(schedule).filter(Boolean).length;
 
@@ -311,15 +674,13 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
     <View style={{ paddingHorizontal: 16 }}>
       <View style={s.weekBanner}>
         <Text style={s.weekBannerText}>
-          {trainingCount}-day personalised split with posture correction in every session. Rest days are set for recovery.
+          {trainingCount}-day personalised split. Weight tracked per set — the app learns your strength and suggests increases automatically.
         </Text>
       </View>
-
       {DAYS_ORDER.map(day => {
         const workoutId = schedule[day] ?? null;
         const workout = workoutId ? workouts[workoutId] : null;
         const isToday = day === todayKey;
-
         return (
           <View key={day} style={[s.weekRow, isToday && { borderColor: colors.accent }]}>
             <View style={[s.weekDot, { backgroundColor: workout ? workout.color : colors.border }]} />
@@ -332,23 +693,16 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
                 <>
                   <Text style={s.weekWorkout}>{workout.name} · {workout.focus}</Text>
                   <Text style={s.weekPosture}>
-                    + {workout.postureWarmup?.length ?? 0} posture warm-up · {workout.postureCooldown?.length ?? 0} posture cooldown
+                    + {workout.postureWarmup?.length ?? 0} posture warm-up · {workout.postureCooldown?.length ?? 0} cooldown
                   </Text>
                 </>
               ) : (
-                <Text style={s.weekWorkout}>Rest Day · active recovery or light walk</Text>
+                <Text style={s.weekWorkout}>Rest Day · active recovery</Text>
               )}
             </View>
           </View>
         );
       })}
-
-      <View style={s.tipCard}>
-        <Ionicons name="information-circle" size={16} color={colors.info} style={{ marginRight: 8, marginTop: 1 }} />
-        <Text style={s.tipText}>
-          Posture correction is baked into every workout — warm-up activates the right muscles, cooldown releases tightness.
-        </Text>
-      </View>
     </View>
   );
 }
@@ -359,17 +713,16 @@ function PostureGuideTab({ expandedId, setExpandedId }) {
   const critical = POSTURE_EXERCISES.filter(e => e.priority === 'CRITICAL');
   const high = POSTURE_EXERCISES.filter(e => e.priority === 'HIGH');
   const medium = POSTURE_EXERCISES.filter(e => e.priority === 'MEDIUM');
-
   return (
     <View style={{ paddingHorizontal: 16 }}>
       <View style={s.postureBanner}>
         <Ionicons name="warning" size={15} color={colors.warning} style={{ marginRight: 8 }} />
         <Text style={s.postureBannerText}>
-          These exercises are embedded in your workouts. This tab is your reference guide — and a reminder to do the critical ones at your desk too.
+          These are embedded in your workouts. This tab is your reference guide — also do critical ones at your desk.
         </Text>
       </View>
       <PostureGuideSection title="Critical — Also Do At Your Desk" exercises={critical} color={colors.secondary} expandedId={expandedId} setExpandedId={setExpandedId} />
-      <PostureGuideSection title="High Priority — In Every Workout" exercises={high} color={colors.warning} expandedId={expandedId} setExpandedId={setExpandedId} />
+      <PostureGuideSection title="High Priority" exercises={high} color={colors.warning} expandedId={expandedId} setExpandedId={setExpandedId} />
       {medium.length > 0 && (
         <PostureGuideSection title="Good Addition" exercises={medium} color={colors.success} expandedId={expandedId} setExpandedId={setExpandedId} />
       )}
@@ -401,9 +754,7 @@ function PostureGuideSection({ title, exercises, color, expandedId, setExpandedI
               <Text style={s.guideRow}>🎯 <Text style={s.guideRowLabel}>Target: </Text>{ex.targetArea}</Text>
               <Text style={s.guideRow}>💡 <Text style={s.guideRowLabel}>Why: </Text>{ex.benefit}</Text>
               <Text style={s.guideRow}>📋 <Text style={s.guideRowLabel}>How: </Text>{ex.howTo}</Text>
-              <Text style={[s.guideRow, { color: colors.accentLight }]}>
-                ⏱ <Text style={[s.guideRowLabel, { color: colors.accentLight }]}>Frequency: </Text>{ex.frequency}
-              </Text>
+              <Text style={[s.guideRow, { color: colors.accentLight }]}>⏱ <Text style={[s.guideRowLabel, { color: colors.accentLight }]}>Frequency: </Text>{ex.frequency}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -436,15 +787,13 @@ function ExerciseInfoModal({ exercise, onClose }) {
             <Text style={m.sectionTitle}>How to perform</Text>
             {exercise.steps?.map((step, i) => (
               <View key={i} style={m.step}>
-                <View style={m.stepNum}>
-                  <Text style={m.stepNumText}>{i + 1}</Text>
-                </View>
+                <View style={m.stepNum}><Text style={m.stepNumText}>{i + 1}</Text></View>
                 <Text style={m.stepText}>{step}</Text>
               </View>
             ))}
             {exercise.mistakes?.length > 0 && (
               <>
-                <Text style={m.sectionTitle}>Common mistakes to avoid</Text>
+                <Text style={m.sectionTitle}>Common mistakes</Text>
                 {exercise.mistakes.map((mistake, i) => (
                   <View key={i} style={m.mistake}>
                     <Ionicons name="close-circle" size={14} color={colors.secondary} style={{ marginRight: 8, marginTop: 2 }} />
@@ -633,15 +982,14 @@ const s = StyleSheet.create({
   restTitle: { fontSize: 26, color: colors.text, fontWeight: '700', marginTop: 16 },
   restSubtitle: { fontSize: 14, color: colors.textSec, marginTop: 6, textAlign: 'center' },
   restTip: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: colors.card, borderRadius: 12, padding: 14, marginTop: 24,
-    borderWidth: 1, borderColor: colors.border,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.card,
+    borderRadius: 12, padding: 14, marginTop: 24, borderWidth: 1, borderColor: colors.border,
   },
   restTipText: { flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 20 },
 
   workoutHeader: {
     backgroundColor: colors.card, borderRadius: 14, padding: 16,
-    marginTop: 8, marginBottom: 12, flexDirection: 'row',
+    marginTop: 8, marginBottom: 10, flexDirection: 'row',
     justifyContent: 'space-between', alignItems: 'flex-start',
     borderLeftWidth: 4, borderWidth: 1, borderColor: colors.border,
   },
@@ -654,7 +1002,21 @@ const s = StyleSheet.create({
   },
   durationText: { fontSize: 11, color: colors.textSec },
 
-  postureBlock: { borderRadius: 14, borderWidth: 1, marginBottom: 14, overflow: 'hidden' },
+  progressBar: {
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  progressTrack: {
+    height: 6, backgroundColor: colors.surface, borderRadius: 3, overflow: 'hidden', marginBottom: 6,
+  },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressLabel: { fontSize: 11, color: colors.textSec, textAlign: 'right' },
+
+  postureBlock: { borderRadius: 14, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
   postureBlockHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
   postureBlockTitle: { fontSize: 13, fontWeight: '700' },
   postureBlockSubtitle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
@@ -680,15 +1042,21 @@ const s = StyleSheet.create({
     overflow: 'hidden', borderWidth: 1, borderColor: colors.border,
   },
   exCardTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 8 },
+  exExpanded: { borderTopWidth: 1, borderTopColor: colors.border },
   infoBtn: { padding: 2 },
   exColorBar: { width: 3, height: 40, borderRadius: 2 },
   exName: { fontSize: 14, color: colors.text, fontWeight: '600', marginBottom: 6 },
   exMeta: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  chip: { backgroundColor: colors.surface, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  chip: { backgroundColor: colors.surface, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: 'transparent' },
   chipText: { fontSize: 10, color: colors.textSec, fontWeight: '500' },
+  prevWeightBadge: {
+    fontSize: 11, color: colors.accentLight, fontWeight: '700',
+    backgroundColor: colors.accentDim + '40', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
   exDetails: {
-    paddingHorizontal: 14, paddingBottom: 14,
-    borderTopWidth: 1, borderTopColor: colors.border, gap: 8, paddingTop: 10,
+    paddingHorizontal: 14, paddingBottom: 12, gap: 8, paddingTop: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start' },
   detailLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
@@ -713,9 +1081,8 @@ const s = StyleSheet.create({
   },
   weekBannerText: { fontSize: 13, color: colors.textSec, lineHeight: 20 },
   weekRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: colors.card, borderRadius: 12, padding: 14,
-    marginBottom: 8, borderWidth: 1, borderColor: colors.border, gap: 12,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.card,
+    borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border, gap: 12,
   },
   weekDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   weekRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
@@ -724,16 +1091,11 @@ const s = StyleSheet.create({
   weekPosture: { fontSize: 11, color: colors.accentLight, marginTop: 3, fontStyle: 'italic' },
   todayBadge: { backgroundColor: colors.accentDim, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   todayBadgeText: { fontSize: 10, color: colors.accentLight, fontWeight: '700' },
-  tipCard: {
-    flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12,
-    padding: 14, marginTop: 4, borderWidth: 1, borderColor: colors.border, alignItems: 'flex-start',
-  },
-  tipText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 19 },
 
   postureBanner: {
-    flexDirection: 'row', backgroundColor: colors.warning + '18',
-    borderRadius: 12, padding: 14, marginTop: 8, marginBottom: 16,
-    borderWidth: 1, borderColor: colors.warning + '40', alignItems: 'flex-start',
+    flexDirection: 'row', backgroundColor: colors.warning + '18', borderRadius: 12,
+    padding: 14, marginTop: 8, marginBottom: 16, borderWidth: 1,
+    borderColor: colors.warning + '40', alignItems: 'flex-start',
   },
   postureBannerText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 19 },
   guideSection: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
@@ -749,6 +1111,128 @@ const s = StyleSheet.create({
   guideRow: { fontSize: 12, color: colors.textSec, lineHeight: 19 },
   guideRowLabel: { fontWeight: '700', color: colors.textSec },
 });
+
+/* ─── Set Tracker Styles ─────────────────────────────────────────── */
+
+const st = StyleSheet.create({
+  container: {
+    margin: 12,
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
+  prevRef: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
+  colRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface + '80',
+  },
+  colLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  legend: {
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 2,
+    backgroundColor: colors.surface + '50',
+  },
+});
+
+/* ─── Set Row Styles ─────────────────────────────────────────────── */
+
+const sr = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border + '80',
+    gap: 4,
+  },
+  rowActive: { backgroundColor: colors.accentDim + '15' },
+  rowDone: { backgroundColor: colors.success + '08' },
+
+  setNumBadge: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: colors.card,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border,
+  },
+  setNum: { fontSize: 13, color: colors.textSec, fontWeight: '700' },
+
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  suggestedLabel: { fontSize: 9, color: colors.accentLight, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
+  weightInput: {
+    width: 60, height: 36,
+    backgroundColor: colors.card,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.border,
+    textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text,
+  },
+  weightInputDone: {
+    backgroundColor: colors.success + '15',
+    borderColor: colors.success + '40',
+    color: colors.success,
+  },
+  kgLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+
+  fbDoneChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3,
+    borderWidth: 1,
+  },
+  fbDoneText: { fontSize: 10, fontWeight: '700' },
+
+  checkBtn: { width: 36, alignItems: 'center', justifyContent: 'center' },
+
+  feedbackPromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border + '80',
+    gap: 8,
+  },
+  feedbackPromptLabel: { fontSize: 11, color: colors.textSec, fontWeight: '600', marginRight: 4 },
+  fbBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1,
+  },
+  fbBtnText: { fontSize: 12, fontWeight: '700' },
+
+  suggestionHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 56,
+    paddingVertical: 5,
+    backgroundColor: colors.surface + '60',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border + '80',
+  },
+  suggestionHintText: { fontSize: 10, fontWeight: '600' },
+});
+
+/* ─── Modal Styles ───────────────────────────────────────────────── */
 
 const m = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
