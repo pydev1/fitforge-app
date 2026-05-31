@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FitForge — UI Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #080A0E;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #F1F5F9;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 60px;
+  }
+
+  h1 { color: #94A3B8; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; font-weight: 500; }
+  .section-label { color: #64748B; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; text-align: center; }
+
+  /* Phone frame */
+  .phone {
+    width: 375px;
+    background: #0D0F14;
+    border-radius: 44px;
+    overflow: hidden;
+    border: 2px solid #272B3F;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px #1C2030;
+    position: relative;
+  }
+  .phone-label {
+    text-align: center;
+    color: #64748B;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 16px;
+    font-weight: 500;
+  }
+  .notch {
+    width: 120px; height: 28px;
+    background: #0D0F14;
+    border-radius: 0 0 20px 20px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 10;
+    border: 2px solid #1C2030;
+    border-top: none;
+  }
+  .screen { padding: 0 0 16px; }
+
+  /* Colors */
+  :root {
+    --bg: #0D0F14;
+    --surface: #151820;
+    --card: #1C2030;
+    --border: #272B3F;
+    --accent: #F97316;
+    --accent-light: #FB923C;
+    --accent-dim: #431407;
+    --secondary: #F43F5E;
+    --success: #22C55E;
+    --warning: #EAB308;
+    --info: #38BDF8;
+    --text: #F1F5F9;
+    --text-sec: #94A3B8;
+    --text-muted: #64748B;
+  }
+
+  /* Common */
+  .px16 { padding: 0 16px; }
+  .px20 { padding: 0 20px; }
+  .chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 8px;
+    font-size: 10px; color: var(--text-sec); font-weight: 600;
+    display: inline-block;
+  }
+  .badge-today {
+    background: var(--accent-dim); color: var(--accent-light);
+    border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 700;
+  }
+
+  /* ─── Bottom Nav ─── */
+  .bottom-nav {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; padding: 10px 0 4px;
+  }
+  .nav-item {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+  }
+  .nav-icon { font-size: 20px; }
+  .nav-label { font-size: 9px; color: var(--text-muted); font-weight: 500; }
+  .nav-item.active .nav-label { color: var(--accent); }
+  .nav-item.active .nav-icon { filter: none; }
+
+  /* ─── Tab bar ─── */
+  .tab-bar {
+    display: flex; margin: 0 16px 10px;
+    background: var(--surface); border-radius: 12px;
+    padding: 4px; border: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1; padding: 8px; border-radius: 9px;
+    text-align: center; font-size: 11px;
+    color: var(--text-muted); font-weight: 600; cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: #fff; }
+
+  /* ─── Screen Header ─── */
+  .screen-header { padding: 16px 20px 8px; }
+  .screen-title { font-size: 28px; font-weight: 700; color: var(--text); }
+  .screen-subtitle { font-size: 13px; color: var(--text-sec); margin-top: 2px; }
+
+  /* ─── HOME SCREEN ─── */
+  .greeting { font-size: 13px; color: var(--text-sec); }
+  .user-name { font-size: 26px; font-weight: 700; color: var(--text); margin-top: 2px; }
+  .stats-row { display: flex; gap: 8px; padding: 12px 16px; }
+  .stat-card {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px; text-align: center;
+  }
+  .stat-icon { font-size: 16px; margin-bottom: 4px; }
+  .stat-value { font-size: 15px; font-weight: 700; color: var(--text); }
+  .stat-unit { font-size: 9px; color: var(--text-sec); font-weight: 400; }
+  .stat-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+  .section-title-home {
+    font-size: 17px; font-weight: 700; color: var(--text);
+    margin: 20px 20px 10px;
+  }
+  .workout-card-gradient {
+    margin: 0 20px; border-radius: 18px; padding: 20px;
+    background: linear-gradient(135deg, #2563EBcc, #2563EB);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .workout-card-day { font-size: 12px; color: rgba(255,255,255,.65); margin-bottom: 4px; }
+  .workout-card-name { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .workout-card-focus { font-size: 13px; color: rgba(255,255,255,.75); margin-bottom: 10px; }
+  .workout-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255,255,255,.75); }
+  .actions-row { display: flex; padding: 0 20px; gap: 10px; }
+  .action-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .action-icon {
+    width: 54px; height: 54px; border-radius: 15px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+  .action-label { font-size: 10px; color: var(--text-sec); font-weight: 600; text-align: center; }
+  .quote-card {
+    margin: 20px; border-radius: 18px; padding: 22px;
+    background: linear-gradient(135deg, var(--surface), var(--card));
+    border: 1px solid var(--border); text-align: center;
+  }
+  .quote-text { font-size: 14px; color: var(--text); font-style: italic; line-height: 1.6; }
+  .quote-author { font-size: 12px; color: var(--text-sec); margin-top: 10px; }
+
+  /* ─── WORKOUT SCREEN ─── */
+  .workout-day-header {
+    background: var(--card); border-radius: 14px; padding: 16px;
+    margin: 8px 16px 12px; display: flex; justify-content: space-between;
+    align-items: flex-start; border-left: 4px solid #10B981;
+    border: 1px solid var(--border); border-left-width: 4px;
+    border-left-color: #10B981;
+  }
+  .day-name { font-size: 12px; color: var(--text-sec); font-weight: 500; }
+  .workout-name { font-size: 20px; font-weight: 700; color: var(--text); margin-top: 2px; }
+  .workout-focus-text { font-size: 13px; color: var(--text-sec); margin-top: 2px; }
+  .duration-badge {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--surface); border-radius: 8px;
+    padding: 4px 8px; font-size: 11px; color: var(--text-sec);
+  }
+  .section-label-bar {
+    display: flex; align-items: center; gap: 6px;
+    border-left: 3px solid #10B981; padding-left: 8px;
+    margin: 4px 16px 8px; font-size: 12px;
+    font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: #10B981;
+  }
+  .ex-card {
+    background: var(--card); border-radius: 14px;
+    margin: 0 16px 8px; border: 1px solid var(--border); overflow: hidden;
+  }
+  .ex-card-top {
+    display: flex; align-items: center; padding: 14px; gap: 8px;
+  }
+  .ex-color-bar { width: 3px; height: 40px; border-radius: 2px; flex-shrink: 0; }
+  .ex-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .ex-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ex-details {
+    padding: 10px 14px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;
+  }
+  .detail-row { display: flex; gap: 6px; align-items: flex-start; }
+  .detail-icon { font-size: 13px; color: var(--accent-light); margin-top: 2px; flex-shrink: 0; }
+  .detail-content {}
+  .detail-label { font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
+  .detail-value { font-size: 13px; color: var(--text-sec); line-height: 1.4; }
+  .posture-note {
+    background: rgba(67,20,7,.35); border-radius: 8px; padding: 10px;
+    border-left: 3px solid var(--accent-light);
+  }
+  .posture-note-text { font-size: 12px; color: var(--accent-light); line-height: 1.5; }
+
+  /* ─── SET LOGGER ─── */
+  .set-logger { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; }
+  .tbl-header {
+    display: flex; align-items: center; margin-bottom: 6px; padding: 0 2px; gap: 6px;
+  }
+  .tbl-row {
+    display: flex; align-items: center; margin-bottom: 6px; padding: 0 2px; gap: 6px;
+  }
+  .tbl-row.saved { opacity: .7; }
+  .col-num { width: 30px; display: flex; justify-content: center; }
+  .col-weight { flex: 2; }
+  .col-reps { flex: 1.4; }
+  .col-feel { flex: 1.8; display: flex; justify-content: center; align-items: center; }
+  .col-save { width: 30px; }
+  .col-lbl { font-size: 9px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .num-circle {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--card); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--text-sec);
+  }
+  .num-circle.done {
+    background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.5);
+    color: #22C55E;
+  }
+  .input-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 6px;
+    font-size: 14px; color: var(--text); font-weight: 600;
+    text-align: center; width: 100%;
+  }
+  .input-row { display: flex; align-items: center; gap: 3px; }
+  .unit-text { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+  .saved-val { font-size: 13px; color: #22C55E; font-weight: 700; text-align: center; width: 100%; }
+  .feel-row { display: flex; gap: 5px; align-items: center; justify-content: center; }
+  .feel-dot { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; }
+  .save-btn {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    border: none;
+  }
+  .save-btn.active { background: var(--accent); color: #fff; }
+  .save-btn.done { background: rgba(34,197,94,.3); color: #22C55E; }
+  .sl-legend {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .legend-txt { font-size: 10px; color: var(--text-muted); }
+  .legend-note { font-size: 10px; color: var(--text-muted); font-style: italic; }
+
+  /* Complete button */
+  .complete-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); border-radius: 14px; padding: 16px;
+    margin: 16px 16px 8px; font-size: 15px; color: #fff; font-weight: 700;
+  }
+
+  /* ─── WEEKLY TAB ─── */
+  .week-banner {
+    background: var(--card); border-radius: 12px; padding: 14px;
+    margin: 8px 16px 14px; border: 1px solid var(--border);
+    font-size: 13px; color: var(--text-sec); line-height: 1.5;
+  }
+  .week-row {
+    display: flex; align-items: flex-start;
+    background: var(--card); border-radius: 12px; padding: 14px;
+    margin: 0 16px 8px; border: 1px solid var(--border); gap: 12px;
+    cursor: pointer;
+  }
+  .week-row.today { border-color: var(--accent); }
+  .week-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .week-row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .week-day { font-size: 13px; font-weight: 700; color: var(--text); }
+  .week-day.today { color: var(--accent-light); }
+  .week-workout { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+  .week-chevron { margin-left: auto; font-size: 13px; color: var(--text-muted); }
+  .week-ex-list {
+    margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px;
+  }
+  .week-ex-row { padding: 6px 0; border-bottom: 1px solid rgba(39,43,63,.6); }
+  .week-ex-row:last-child { border-bottom: none; }
+  .week-ex-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .week-ex-meta { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+  .week-ex-muscles { font-size: 10px; color: var(--text-muted); margin-top: 1px; font-style: italic; }
+
+  /* ─── COACH SCREEN ─── */
+  .coach-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .coach-header-left { display: flex; align-items: center; gap: 10px; }
+  .coach-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .coach-title { font-size: 16px; font-weight: 700; color: var(--text); }
+  .coach-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .quick-chips {
+    display: flex; gap: 8px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); overflow-x: auto;
+  }
+  .quick-chip {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 20px; padding: 6px 12px;
+    font-size: 12px; color: var(--text-sec); white-space: nowrap;
+  }
+  .messages { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble-wrap { display: flex; align-items: flex-end; gap: 8px; }
+  .bubble-wrap.user { justify-content: flex-end; }
+  .bubble-wrap.ai { justify-content: flex-start; }
+  .ai-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); display: flex; align-items: center;
+    justify-content: center; font-size: 11px; flex-shrink: 0; margin-bottom: 2px;
+  }
+  .bubble {
+    max-width: 75%; border-radius: 18px; padding: 12px 14px; font-size: 14px; line-height: 1.5;
+  }
+  .bubble.user { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .bubble.ai {
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-bottom-left-radius: 4px;
+  }
+  .coach-input-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px; border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .coach-input {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 20px; padding: 10px 16px; font-size: 14px; color: var(--text-muted);
+  }
+  .send-btn {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: var(--accent); display: flex; align-items: center;
+    justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+
+  /* ─── PROGRESS SCREEN ─── */
+  .summary-row { display: flex; gap: 8px; padding: 8px 16px; }
+  .summary-card {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px; text-align: center;
+  }
+  .summary-icon { font-size: 17px; margin-bottom: 4px; }
+  .summary-value { font-size: 16px; font-weight: 700; color: var(--text); }
+  .summary-unit { font-size: 10px; color: var(--text-sec); font-weight: 400; }
+  .summary-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+  .chart-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px; margin: 16px 20px 0;
+  }
+  .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .chart-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .chart-current { font-size: 12px; color: var(--text-sec); }
+  .chart-placeholder {
+    height: 80px; background: var(--surface); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .chart-line {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: transparent;
+  }
+  svg.sparkline { width: 100%; height: 70px; }
+  .strength-row {
+    display: flex; align-items: center; padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .strength-row:last-child { border-bottom: none; }
+  .strength-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .strength-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .delta-badge { border-radius: 8px; padding: 4px 8px; flex-shrink: 0; margin-left: auto; }
+  .delta-up { background: rgba(34,197,94,.15); color: #22C55E; font-size: 12px; font-weight: 700; }
+
+  /* Horizontal screens layout */
+  .screens-grid {
+    display: flex; flex-wrap: wrap; gap: 40px; justify-content: center;
+  }
+  .screen-wrapper { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+</style>
+</head>
+<body>
+
+<h1>FitForge — UI Mockup · Latest Commit 5ad00bc</h1>
+
+<div class="screens-grid">
+
+  <!-- ─── SCREEN 1: HOME ─── -->
+  <div class="screen-wrapper">
+    <div class="section-label">Home Screen</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <!-- Header -->
+        <div style="padding:16px 20px 4px; display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+            <div class="greeting">Good Morning,</div>
+            <div class="user-name">Dharm 👊</div>
+          </div>
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;">⚙️</div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-icon">⚖️</div>
+            <div class="stat-value">67<span class="stat-unit">kg</span></div>
+            <div class="stat-label">Weight</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🩺</div>
+            <div class="stat-value">87<span class="stat-unit">cm</span></div>
+            <div class="stat-label">Waist</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">💪</div>
+            <div class="stat-value">22.6</div>
+            <div class="stat-label">BMI</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🏋️</div>
+            <div class="stat-value">12</div>
+            <div class="stat-label">Sessions</div>
+          </div>
+        </div>
+
+        <!-- Today's Session -->
+        <div class="section-title-home">Today's Session</div>
+        <div class="workout-card-gradient">
+          <div style="flex:1">
+            <div class="workout-card-day">Saturday</div>
+            <div class="workout-card-name">Legs + Core</div>
+            <div class="workout-card-focus">Quads · Hamstrings · Glutes · Core</div>
+            <div class="workout-meta">
+              <span>⏱</span><span>55 min</span>
+              <span style="margin-left:8px">🏋️</span><span>6 exercises</span>
+            </div>
+          </div>
+          <span style="font-size:20px;color:rgba(255,255,255,.5)">›</span>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="section-title-home">Quick Actions</div>
+        <div class="actions-row">
+          <div class="action-item">
+            <div class="action-icon" style="background:rgba(249,115,22,.15)">💬</div>
+            <div class="action-label">AI Coach</div>
+          </div>
+          <div class="action-item">
+            <div class="action-icon" style="background:rgba(244,63,94,.15)">📸</div>
+            <div class="action-label">Photo Scan</div>
+          </div>
+          <div class="action-item">
+            <div class="action-icon" style="background:rgba(34,197,94,.15)">📊</div>
+            <div class="action-label">Progress</div>
+          </div>
+          <div class="action-item">
+            <div class="action-icon" style="background:rgba(234,179,8,.15)">🧍</div>
+            <div class="action-label">Posture Fix</div>
+          </div>
+        </div>
+
+        <!-- Quote -->
+        <div class="quote-card">
+          <div style="font-size:20px;margin-bottom:10px">🔥</div>
+          <div class="quote-text">"The only bad workout is the one that didn't happen."</div>
+          <div class="quote-author">— Unknown</div>
+        </div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item active">
+          <div class="nav-icon">🏠</div>
+          <div class="nav-label" style="color:var(--accent)">Home</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-icon">🏋️</div>
+          <div class="nav-label">Workout</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-icon">💬</div>
+          <div class="nav-label">Coach</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-icon">📸</div>
+          <div class="nav-label">Scan</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-icon">📊</div>
+          <div class="nav-label">Progress</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SCREEN 2: WORKOUT TODAY (expanded set logger) ─── -->
+  <div class="screen-wrapper">
+    <div class="section-label">Workout · Today Tab (Set Logger)</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div class="screen-title">Workouts</div>
+          <div class="screen-subtitle">4-day split · personalised for Dharm</div>
+        </div>
+
+        <div class="tab-bar">
+          <div class="tab active">Today</div>
+          <div class="tab">Weekly</div>
+          <div class="tab">Posture Guide</div>
+        </div>
+
+        <!-- Workout header -->
+        <div class="workout-day-header">
+          <div>
+            <div class="day-name">Saturday</div>
+            <div class="workout-name">Legs + Core</div>
+            <div class="workout-focus-text">Quads · Hamstrings · Glutes</div>
+          </div>
+          <div class="duration-badge">⏱ 55 min</div>
+        </div>
+
+        <div class="section-label-bar">🏋️ Main Workout</div>
+
+        <!-- Exercise card — COLLAPSED -->
+        <div class="ex-card" style="margin-bottom:8px">
+          <div class="ex-card-top">
+            <div class="ex-color-bar" style="background:#10B981"></div>
+            <div style="flex:1">
+              <div class="ex-name">Dumbbell Goblet Squat</div>
+              <div class="ex-meta">
+                <span class="chip">3 sets</span>
+                <span class="chip">12–15</span>
+                <span class="chip">Rest 45s</span>
+              </div>
+            </div>
+            <span style="font-size:18px;color:var(--info)">ℹ️</span>
+            <span style="font-size:16px;color:var(--text-muted);margin-left:4px">∨</span>
+          </div>
+        </div>
+
+        <!-- Exercise card — EXPANDED with Set Logger -->
+        <div class="ex-card">
+          <div class="ex-card-top">
+            <div class="ex-color-bar" style="background:#10B981"></div>
+            <div style="flex:1">
+              <div class="ex-name">Dumbbell Romanian Deadlift</div>
+              <div class="ex-meta">
+                <span class="chip">3 sets</span>
+                <span class="chip">10–12</span>
+                <span class="chip">Rest 60s</span>
+              </div>
+            </div>
+            <span style="font-size:18px;color:var(--info)">ℹ️</span>
+            <span style="font-size:16px;color:var(--text-muted);margin-left:4px">∧</span>
+          </div>
+
+          <div class="ex-details">
+            <div class="detail-row">
+              <span class="detail-icon">💪</span>
+              <div class="detail-content">
+                <div class="detail-label">Muscles</div>
+                <div class="detail-value">Hamstrings, Glutes, Lower Back</div>
+              </div>
+            </div>
+            <div class="detail-row">
+              <span class="detail-icon">🔧</span>
+              <div class="detail-content">
+                <div class="detail-label">Equipment</div>
+                <div class="detail-value">Dumbbells</div>
+              </div>
+            </div>
+            <div class="posture-note">
+              <div class="posture-note-text">💡 Posture: keep neutral spine, hinge at hip — not a squat</div>
+            </div>
+
+            <!-- SET LOGGER TABLE -->
+            <div class="set-logger">
+              <!-- Header -->
+              <div class="tbl-header">
+                <div class="col-num"></div>
+                <div class="col-weight col-lbl">WEIGHT</div>
+                <div class="col-reps col-lbl">REPS</div>
+                <div class="col-feel col-lbl">FEEL</div>
+                <div class="col-save"></div>
+              </div>
+
+              <!-- Row 1 — SAVED -->
+              <div class="tbl-row saved">
+                <div class="col-num"><div class="num-circle done">1</div></div>
+                <div class="col-weight"><div class="saved-val">20kg</div></div>
+                <div class="col-reps"><div class="saved-val">12</div></div>
+                <div class="col-feel" style="color:#22C55E;font-size:18px;">✓</div>
+                <div class="col-save"><button class="save-btn done">✓</button></div>
+              </div>
+
+              <!-- Row 2 — ACTIVE (suggestion shown) -->
+              <div class="tbl-row">
+                <div class="col-num"><div class="num-circle">2</div></div>
+                <div class="col-weight">
+                  <div class="input-row">
+                    <input class="input-box" value="22.5" style="font-size:14px;width:100%;border:1px solid var(--accent);outline:none;font-family:inherit;" />
+                    <span class="unit-text">kg</span>
+                  </div>
+                </div>
+                <div class="col-reps">
+                  <input class="input-box" placeholder="10" style="font-size:14px;width:100%;outline:none;font-family:inherit;" />
+                </div>
+                <div class="col-feel">
+                  <div class="feel-row">
+                    <div class="feel-dot" style="background:#22C55E" title="Easy"></div>
+                    <div class="feel-dot" style="background:rgba(56,189,248,.3)" title="Good"></div>
+                    <div class="feel-dot" style="background:rgba(244,63,94,.3)" title="Hard"></div>
+                  </div>
+                </div>
+                <div class="col-save"><button class="save-btn active">✓</button></div>
+              </div>
+
+              <!-- Row 3 — EMPTY -->
+              <div class="tbl-row">
+                <div class="col-num"><div class="num-circle">3</div></div>
+                <div class="col-weight">
+                  <div class="input-row">
+                    <input class="input-box" placeholder="20" style="font-size:14px;width:100%;outline:none;font-family:inherit;" />
+                    <span class="unit-text">kg</span>
+                  </div>
+                </div>
+                <div class="col-reps">
+                  <input class="input-box" placeholder="10" style="font-size:14px;width:100%;outline:none;font-family:inherit;" />
+                </div>
+                <div class="col-feel">
+                  <div class="feel-row">
+                    <div class="feel-dot" style="background:rgba(34,197,94,.3)"></div>
+                    <div class="feel-dot" style="background:rgba(56,189,248,.3)"></div>
+                    <div class="feel-dot" style="background:rgba(244,63,94,.3)"></div>
+                  </div>
+                </div>
+                <div class="col-save"><button class="save-btn active" style="opacity:.4">✓</button></div>
+              </div>
+
+              <!-- Legend -->
+              <div class="sl-legend">
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#22C55E"></div>
+                  <span class="legend-txt">Easy</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#38BDF8"></div>
+                  <span class="legend-txt">Good</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#F43F5E"></div>
+                  <span class="legend-txt">Hard</span>
+                </div>
+                <span class="legend-note">· affects next session suggestion</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="complete-btn">✓ Mark as Complete</div>
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item"><div class="nav-icon">🏠</div><div class="nav-label">Home</div></div>
+        <div class="nav-item active"><div class="nav-icon">🏋️</div><div class="nav-label" style="color:var(--accent)">Workout</div></div>
+        <div class="nav-item"><div class="nav-icon">💬</div><div class="nav-label">Coach</div></div>
+        <div class="nav-item"><div class="nav-icon">📸</div><div class="nav-label">Scan</div></div>
+        <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Progress</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SCREEN 3: WEEKLY TAB ─── -->
+  <div class="screen-wrapper">
+    <div class="section-label">Workout · Weekly Tab (Drill-Down)</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div class="screen-title">Workouts</div>
+          <div class="screen-subtitle">4-day split · personalised for Dharm</div>
+        </div>
+
+        <div class="tab-bar">
+          <div class="tab">Today</div>
+          <div class="tab active">Weekly</div>
+          <div class="tab">Posture Guide</div>
+        </div>
+
+        <div class="week-banner">4-day split · tap any day to see exercises</div>
+
+        <!-- Mon — rest -->
+        <div class="week-row">
+          <div class="week-dot" style="background:var(--border)"></div>
+          <div style="flex:1">
+            <div class="week-row-top"><span class="week-day">Monday</span></div>
+            <div class="week-workout">Rest Day · active recovery</div>
+          </div>
+        </div>
+
+        <!-- Tue — Push day collapsed -->
+        <div class="week-row">
+          <div class="week-dot" style="background:#2563EB"></div>
+          <div style="flex:1">
+            <div class="week-row-top">
+              <span class="week-day">Tuesday</span>
+              <span class="week-chevron">∨</span>
+            </div>
+            <div class="week-workout">Push Day · Chest · Shoulders · Triceps</div>
+          </div>
+        </div>
+
+        <!-- Wed — rest -->
+        <div class="week-row">
+          <div class="week-dot" style="background:var(--border)"></div>
+          <div style="flex:1">
+            <div class="week-row-top"><span class="week-day">Wednesday</span></div>
+            <div class="week-workout">Rest Day · active recovery</div>
+          </div>
+        </div>
+
+        <!-- Thu — Pull day EXPANDED -->
+        <div class="week-row" style="flex-direction:column;align-items:stretch;padding-bottom:0">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div class="week-dot" style="background:#3B82F6;margin-top:4px"></div>
+            <div style="flex:1">
+              <div class="week-row-top">
+                <span class="week-day">Thursday</span>
+                <span class="week-chevron">∧</span>
+              </div>
+              <div class="week-workout">Pull Day · Back · Biceps · Rear Delts</div>
+            </div>
+          </div>
+          <div class="week-ex-list" style="padding-left:22px;padding-bottom:10px">
+            <div class="week-ex-row">
+              <div class="week-ex-name">Dumbbell Bent-Over Row</div>
+              <div class="week-ex-meta">3 sets · 10–12 · Rest 90s</div>
+              <div class="week-ex-muscles">Lats, Rhomboids, Rear Delts</div>
+            </div>
+            <div class="week-ex-row">
+              <div class="week-ex-name">Dumbbell Bicep Curl</div>
+              <div class="week-ex-meta">3 sets · 12–15 · Rest 60s</div>
+              <div class="week-ex-muscles">Biceps, Brachialis</div>
+            </div>
+            <div class="week-ex-row">
+              <div class="week-ex-name">Face Pull (Resistance Band)</div>
+              <div class="week-ex-meta">3 sets · 15 · Rest 60s</div>
+              <div class="week-ex-muscles">Rear Delts, Rotator Cuff</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fri — rest -->
+        <div class="week-row">
+          <div class="week-dot" style="background:var(--border)"></div>
+          <div style="flex:1">
+            <div class="week-row-top"><span class="week-day">Friday</span></div>
+            <div class="week-workout">Rest Day · active recovery</div>
+          </div>
+        </div>
+
+        <!-- Sat — TODAY, Legs collapsed -->
+        <div class="week-row today">
+          <div class="week-dot" style="background:#10B981"></div>
+          <div style="flex:1">
+            <div class="week-row-top">
+              <span class="week-day today">Saturday</span>
+              <span class="badge-today">Today</span>
+              <span class="week-chevron">∨</span>
+            </div>
+            <div class="week-workout">Legs + Core · Quads · Hamstrings</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item"><div class="nav-icon">🏠</div><div class="nav-label">Home</div></div>
+        <div class="nav-item active"><div class="nav-icon">🏋️</div><div class="nav-label" style="color:var(--accent)">Workout</div></div>
+        <div class="nav-item"><div class="nav-icon">💬</div><div class="nav-label">Coach</div></div>
+        <div class="nav-item"><div class="nav-icon">📸</div><div class="nav-label">Scan</div></div>
+        <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Progress</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SCREEN 4: AI COACH ─── -->
+  <div class="screen-wrapper">
+    <div class="section-label">Coach Screen (Workout-Aware)</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <!-- Header -->
+        <div class="coach-header">
+          <div class="coach-header-left">
+            <div class="coach-avatar">✨</div>
+            <div>
+              <div class="coach-title">AI Coach</div>
+              <div class="coach-sub">Powered by Claude · knows your plan</div>
+            </div>
+          </div>
+          <span style="font-size:18px;color:var(--text-muted)">🗑</span>
+        </div>
+
+        <!-- Quick chips -->
+        <div class="quick-chips">
+          <div class="quick-chip">What's today's workout?</div>
+          <div class="quick-chip">Modify today's workout</div>
+          <div class="quick-chip">Progressive overload tips</div>
+          <div class="quick-chip">I'm feeling sore</div>
+        </div>
+
+        <!-- Messages -->
+        <div class="messages">
+          <div class="bubble-wrap ai">
+            <div class="ai-avatar">✨</div>
+            <div class="bubble ai">Hey Dharm! 💪 I know your full 4-day split. Today is Saturday — you've got <strong>Legs + Core</strong>: Goblet Squat, Romanian Deadlift, and 4 more. What do you need?</div>
+          </div>
+
+          <div class="bubble-wrap user">
+            <div class="bubble user">What exercises do I have on Thursday?</div>
+          </div>
+
+          <div class="bubble-wrap ai">
+            <div class="ai-avatar">✨</div>
+            <div class="bubble ai">Thursday is <strong>Pull Day</strong> — Back, Biceps, Rear Delts 🔵<br><br>• Bent-Over Row 3×10–12<br>• Bicep Curl 3×12–15<br>• Face Pull 3×15<br>• Dumbbell Shrug 3×15<br><br>Key tip: pull with your elbows, not your hands 💡</div>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="coach-input-row">
+          <div class="coach-input">Ask your coach anything...</div>
+          <div class="send-btn">➤</div>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item"><div class="nav-icon">🏠</div><div class="nav-label">Home</div></div>
+        <div class="nav-item"><div class="nav-icon">🏋️</div><div class="nav-label">Workout</div></div>
+        <div class="nav-item active"><div class="nav-icon">💬</div><div class="nav-label" style="color:var(--accent)">Coach</div></div>
+        <div class="nav-item"><div class="nav-icon">📸</div><div class="nav-label">Scan</div></div>
+        <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Progress</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SCREEN 5: PROGRESS ─── -->
+  <div class="screen-wrapper">
+    <div class="section-label">Progress Screen (Strength Tracking)</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:16px 20px 8px">
+          <div>
+            <div class="screen-title">Progress</div>
+            <div style="font-size:13px;color:var(--text-sec);margin-top:2px">Track your transformation</div>
+          </div>
+          <div style="background:var(--accent);border-radius:20px;padding:8px 14px;display:flex;align-items:center;gap:4px;font-size:13px;color:#fff;font-weight:700;">+ Log</div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="summary-row">
+          <div class="summary-card">
+            <div class="summary-icon">🔥</div>
+            <div class="summary-value">5<span class="summary-unit">days</span></div>
+            <div class="summary-label">Streak</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">🏋️</div>
+            <div class="summary-value">12<span class="summary-unit">total</span></div>
+            <div class="summary-label">Sessions</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">⚖️</div>
+            <div class="summary-value" style="color:#22C55E">-2.0<span class="summary-unit">kg</span></div>
+            <div class="summary-label">Weight</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">📏</div>
+            <div class="summary-value" style="color:#22C55E">-3<span class="summary-unit">cm</span></div>
+            <div class="summary-label">Waist</div>
+          </div>
+        </div>
+
+        <!-- Strength Progress card -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Strength Progress</div>
+          </div>
+          <div class="strength-row">
+            <div style="flex:1">
+              <div class="strength-name">DB Romanian Deadlift</div>
+              <div class="strength-meta">18 sets · Best 25kg · Last 22.5kg</div>
+            </div>
+            <div class="delta-badge delta-up">+5kg</div>
+          </div>
+          <div class="strength-row">
+            <div style="flex:1">
+              <div class="strength-name">Incline DB Press</div>
+              <div class="strength-meta">15 sets · Best 18kg · Last 18kg</div>
+            </div>
+            <div class="delta-badge delta-up">+3kg</div>
+          </div>
+          <div class="strength-row">
+            <div style="flex:1">
+              <div class="strength-name">Goblet Squat</div>
+              <div class="strength-meta">12 sets · Best 20kg · Last 20kg</div>
+            </div>
+            <div class="delta-badge delta-up">+2.5kg</div>
+          </div>
+          <div class="strength-row">
+            <div style="flex:1">
+              <div class="strength-name">Bent-Over Row</div>
+              <div class="strength-meta">9 sets · Best 20kg · Last 20kg</div>
+            </div>
+            <div class="delta-badge delta-up">+5kg</div>
+          </div>
+        </div>
+
+        <!-- Weight chart -->
+        <div class="chart-card" style="margin-top:14px">
+          <div class="chart-header">
+            <div class="chart-title">Weight (kg)</div>
+            <div class="chart-current">65kg now</div>
+          </div>
+          <div class="chart-placeholder">
+            <svg class="sparkline" viewBox="0 0 320 70" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#F97316" stop-opacity="0.3"/>
+                  <stop offset="100%" stop-color="#F97316" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,50 L53,46 L106,42 L160,38 L213,34 L267,30 L320,24" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="round"/>
+              <path d="M0,50 L53,46 L106,42 L160,38 L213,34 L267,30 L320,24 L320,70 L0,70Z" fill="url(#grad)"/>
+              <circle cx="0" cy="50" r="4" fill="#0D0F14" stroke="#F97316" stroke-width="2"/>
+              <circle cx="53" cy="46" r="4" fill="#0D0F14" stroke="#F97316" stroke-width="2"/>
+              <circle cx="106" cy="42" r="4" fill="#0D0F14" stroke="#F97316" stroke-width="2"/>
+              <circle cx="160" cy="38" r="4" fill="#0D0F14" stroke="#F97316" stroke-width="2"/>
+              <circle cx="213" cy="34" r="4" fill="#0D0F14" stroke="#F97316" stroke-width="2"/>
+              <circle cx="267" cy="30" r="4" fill="#0D0F14" stroke="#F97316" stroke-width="2"/>
+              <circle cx="320" cy="24" r="4" fill="#0D0F14" stroke="#FB923C" stroke-width="2"/>
+            </svg>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item"><div class="nav-icon">🏠</div><div class="nav-label">Home</div></div>
+        <div class="nav-item"><div class="nav-icon">🏋️</div><div class="nav-label">Workout</div></div>
+        <div class="nav-item"><div class="nav-icon">💬</div><div class="nav-label">Coach</div></div>
+        <div class="nav-item"><div class="nav-icon">📸</div><div class="nav-label">Scan</div></div>
+        <div class="nav-item active"><div class="nav-icon">📊</div><div class="nav-label" style="color:var(--accent)">Progress</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
