@@ -1,19 +1,33 @@
+// Material 3 dark — fitness / energetic
 export const colors = {
-  bg: '#0C0C0C',
-  surface: '#141414',
-  card: '#1C1C1C',
-  cardAlt: '#222222',
-  border: '#2E2E2E',
-  accent: '#F97316',
-  accentLight: '#FB923C',
-  accentDim: '#431407',
+  // Surface hierarchy (no blue tint — warm neutral dark)
+  bg: '#141218',
+  surface: '#1D1B20',
+  card: '#211F26',
+  cardAlt: '#2B2930',
+  cardHighest: '#36343B',
+
+  // Outline
+  border: '#49454F',
+
+  // Primary — vibrant fitness orange
+  accent: '#FF6B35',
+  accentLight: '#FF8A5B',
+  accentDim: '#4A1800',
+
+  // Semantic
   secondary: '#F43F5E',
   secondaryDim: '#7F1D1D',
-  success: '#22C55E',
-  warning: '#EAB308',
-  info: '#38BDF8',
-  text: '#F0F0F0',
-  textSec: '#9A9A9A',
-  textMuted: '#636363',
+  success: '#6DD58C',
+  successDim: '#1B3A27',
+  warning: '#F4C430',
+  warningDim: '#3A2D00',
+  info: '#80CBFF',
+  infoDim: '#0D2B45',
+
+  // Text
+  text: '#E6E1E5',
+  textSec: '#CAC4D0',
+  textMuted: '#938F99',
   white: '#FFFFFF',
 };
