@@ -83,7 +83,7 @@ export default function CoachScreen({ navigation }) {
     try {
       const history = state.chatHistory.length === 0 ? [] : state.chatHistory;
       const allMessages = [...history, userMsg];
-      const reply = await sendChatMessage(allMessages, state.apiKey, state.userProfile, state.generatedPlan);
+      const reply = await sendChatMessage(allMessages, state.apiKey, state.userProfile, state.generatedPlan, state.progress);
       const aiMsg = { role: 'assistant', content: reply, id: (Date.now() + 1).toString() };
       dispatch({ type: 'ADD_MESSAGE', payload: aiMsg });
     } catch (err) {

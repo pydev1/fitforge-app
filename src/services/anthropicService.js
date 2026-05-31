@@ -1,7 +1,7 @@
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
-function buildSystemPrompt(userProfile, generatedPlan) {
+function buildSystemPrompt(userProfile, generatedPlan, progress) {
   if (!userProfile || !userProfile.name) {
     return `You are FitForge AI Coach — a personal fitness assistant. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
   }
@@ -74,6 +74,17 @@ Never recommend equipment the user doesn't own. Always align advice with their s
     basePrompt += planSection;
   }
 
+  if (progress?.completedWorkouts?.length > 0) {
+    const recent = [...progress.completedWorkouts].slice(-5).reverse();
+    let historySection = '\n\n**Recent Workout History** (newest first)\n';
+    recent.forEach(w => {
+      const label = generatedPlan?.workouts?.[w.type]?.name || w.type || 'Workout';
+      historySection += `- ${w.date}: ${label}\n`;
+    });
+    basePrompt += historySection;
+    basePrompt += '\nUse this history to answer questions like "what did I train last?" or "what should I do today?" without asking.';
+  }
+
   return basePrompt;
 }
 
@@ -109,7 +120,7 @@ Please respond with:
 Keep it structured, practical, and specific to their equipment.`;
 }
 
-export async function sendChatMessage(messages, apiKey, userProfile) {
+export async function sendChatMessage(messages, apiKey, userProfile, generatedPlan, progress) {
   if (!apiKey) {
     throw new Error('No API key set. Please add your Anthropic API key in Settings.');
   }
@@ -124,7 +135,7 @@ export async function sendChatMessage(messages, apiKey, userProfile) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 1024,
-      system: buildSystemPrompt(userProfile),
+      system: buildSystemPrompt(userProfile, generatedPlan, progress),
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     }),
   });
