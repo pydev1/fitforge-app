@@ -138,7 +138,7 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* Motivation */}
-        <LinearGradient colors={['#0F0F1A', '#1A1A2E']} style={s.quoteCard}>
+        <LinearGradient colors={[colors.surface, colors.card]} style={s.quoteCard}>
           <Ionicons name="flame" size={22} color={colors.warning} style={{ marginBottom: 10 }} />
           <Text style={s.quoteText}>"{quote.quote}"</Text>
           <Text style={s.quoteAuthor}>— {quote.author}</Text>

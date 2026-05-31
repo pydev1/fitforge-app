@@ -1,7 +1,7 @@
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
-function buildSystemPrompt(userProfile) {
+function buildSystemPrompt(userProfile, generatedPlan) {
   if (!userProfile || !userProfile.name) {
     return `You are FitForge AI Coach — a personal fitness assistant. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
   }
@@ -35,7 +35,7 @@ function buildSystemPrompt(userProfile) {
     ? '\n- Occupation: Active job — generally good baseline movement'
     : '';
 
-  return `You are FitForge AI Coach — a personal fitness assistant for ${name}.
+  let basePrompt = `You are FitForge AI Coach — a personal fitness assistant for ${name}.
 
 **User Profile**
 - ${gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : 'User'} | Age: ${age ?? '?'} | Height: ${height ?? '?'}cm | Weight: ${weight ?? '?'}kg${waist ? ` | Waist: ${waist}cm` : ''}${bmi ? ` | BMI: ${bmi}` : ''}
@@ -53,6 +53,28 @@ function buildSystemPrompt(userProfile) {
 - For nutrition advice, keep it simple and realistic
 
 Never recommend equipment the user doesn't own. Always align advice with their stated goals.`;
+
+  if (generatedPlan?.schedule && generatedPlan?.workouts) {
+    const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    let planSection = `\n\n**Workout Schedule** (today is ${todayName})\n`;
+    days.forEach(day => {
+      const workoutId = generatedPlan.schedule[day];
+      if (!workoutId) {
+        planSection += `- ${day}: Rest Day\n`;
+      } else {
+        const w = generatedPlan.workouts[workoutId];
+        if (w) {
+          planSection += `- ${day}: ${w.name} — ${w.focus}\n`;
+          const exList = w.exercises?.map(e => `${e.name} (${e.sets}×${e.reps})`).join(', ');
+          if (exList) planSection += `  Exercises: ${exList}\n`;
+        }
+      }
+    });
+    basePrompt += planSection;
+  }
+
+  return basePrompt;
 }
 
 function buildPhotoPrompt(userProfile) {

@@ -26,7 +26,7 @@ export const WORKOUTS = {
     day: 'Tuesday',
     duration: '50 min',
     focus: 'Chest · Shoulders · Triceps',
-    color: '#7C3AED',
+    color: '#2563EB',
     postureWarmup: [
       { id: 'pw_p1', name: 'Cat-Cow Stretch', reps: '10 slow reps', benefit: 'Wakes up the spine after sleeping/sitting', icon: '🐱' },
       { id: 'pw_p2', name: 'Thoracic Rotation', reps: '8 each side', benefit: 'Opens stiff mid-back before pressing', icon: '🔄' },

@@ -295,6 +295,7 @@ function DetailRow({ icon, label, value }) {
 
 function WeeklyTab({ generatedPlan, completedWorkouts }) {
   const todayKey = getTodayKey();
+  const [expandedDay, setExpandedDay] = React.useState(null);
 
   if (!generatedPlan) {
     return (
@@ -311,7 +312,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
     <View style={{ paddingHorizontal: 16 }}>
       <View style={s.weekBanner}>
         <Text style={s.weekBannerText}>
-          {trainingCount}-day personalised split with posture correction in every session. Rest days are set for recovery.
+          {trainingCount}-day split · tap any day to see exercises
         </Text>
       </View>
 
@@ -319,27 +320,47 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
         const workoutId = schedule[day] ?? null;
         const workout = workoutId ? workouts[workoutId] : null;
         const isToday = day === todayKey;
+        const isExpanded = expandedDay === day;
 
         return (
-          <View key={day} style={[s.weekRow, isToday && { borderColor: colors.accent }]}>
+          <TouchableOpacity
+            key={day}
+            style={[s.weekRow, isToday && { borderColor: colors.accent }]}
+            onPress={() => workout && setExpandedDay(isExpanded ? null : day)}
+            activeOpacity={workout ? 0.75 : 1}
+          >
             <View style={[s.weekDot, { backgroundColor: workout ? workout.color : colors.border }]} />
             <View style={{ flex: 1 }}>
               <View style={s.weekRowTop}>
                 <Text style={[s.weekDay, isToday && { color: colors.accentLight }]}>{day}</Text>
                 {isToday && <View style={s.todayBadge}><Text style={s.todayBadgeText}>Today</Text></View>}
+                {workout && (
+                  <Ionicons
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color={colors.textMuted}
+                    style={{ marginLeft: 'auto' }}
+                  />
+                )}
               </View>
               {workout ? (
-                <>
-                  <Text style={s.weekWorkout}>{workout.name} · {workout.focus}</Text>
-                  <Text style={s.weekPosture}>
-                    + {workout.postureWarmup?.length ?? 0} posture warm-up · {workout.postureCooldown?.length ?? 0} posture cooldown
-                  </Text>
-                </>
+                <Text style={s.weekWorkout}>{workout.name} · {workout.focus}</Text>
               ) : (
-                <Text style={s.weekWorkout}>Rest Day · active recovery or light walk</Text>
+                <Text style={s.weekWorkout}>Rest Day · active recovery</Text>
+              )}
+              {isExpanded && workout && (
+                <View style={s.weekExList}>
+                  {workout.exercises?.map((ex, i) => (
+                    <View key={ex.id} style={[s.weekExRow, i === workout.exercises.length - 1 && { borderBottomWidth: 0 }]}>
+                      <Text style={s.weekExName}>{ex.name}</Text>
+                      <Text style={s.weekExMeta}>{ex.sets} sets · {ex.reps} · Rest {ex.rest}</Text>
+                      <Text style={s.weekExMuscles}>{ex.muscles}</Text>
+                    </View>
+                  ))}
+                </View>
               )}
             </View>
-          </View>
+          </TouchableOpacity>
         );
       })}
 
@@ -468,8 +489,11 @@ function ExerciseInfoModal({ exercise, onClose }) {
 
 /* ─── Set Logger ─────────────────────────────────────────────────── */
 
-const FEEDBACK_COLORS = { easy: colors.success, good: colors.accentLight, hard: colors.secondary };
-const FEEDBACK_LABELS = { easy: 'Too Easy', good: 'Just Right', hard: 'Too Hard' };
+const FEEL_OPTIONS = [
+  { key: 'easy', color: colors.success, label: 'Easy' },
+  { key: 'good', color: colors.info, label: 'Good' },
+  { key: 'hard', color: colors.secondary, label: 'Hard' },
+];
 
 function getSuggestion(setLogs, exerciseId, setIdx, today) {
   const relevant = setLogs
@@ -478,29 +502,22 @@ function getSuggestion(setLogs, exerciseId, setIdx, today) {
   if (!relevant.length) return null;
   const last = relevant[0];
   let weight = last.weight;
-  let reason = 'felt right';
-  if (last.feedback === 'easy') { weight = Math.round((weight + 2.5) * 2) / 2; reason = 'easy last time'; }
-  else if (last.feedback === 'hard') { weight = Math.max(0, Math.round((weight - 2.5) * 2) / 2); reason = 'hard last time'; }
-  return { weight, reason };
+  if (last.feedback === 'easy') weight = Math.round((weight + 2.5) * 2) / 2;
+  else if (last.feedback === 'hard') weight = Math.max(0, Math.round((weight - 2.5) * 2) / 2);
+  return weight;
 }
 
 function SetLogger({ exercise, accentColor }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
   const today = new Date().toISOString().split('T')[0];
-  const numSets = exercise.sets;
 
   const [sets, setSets] = React.useState(() =>
-    Array.from({ length: numSets }, () => ({ weight: '', reps: '', feedback: null, saved: false }))
+    Array.from({ length: exercise.sets }, () => ({ weight: '', reps: '', feedback: null, saved: false }))
   );
 
   function setField(idx, field, value) {
     setSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
-  }
-
-  function applysuggestion(idx) {
-    const s = getSuggestion(setLogs, exercise.id, idx, today);
-    if (s) setField(idx, 'weight', String(s.weight));
   }
 
   function handleSave(idx) {
@@ -508,7 +525,7 @@ function SetLogger({ exercise, accentColor }) {
     const w = parseFloat(set.weight);
     const r = parseInt(set.reps, 10);
     if (isNaN(w) || w <= 0 || isNaN(r) || r <= 0) {
-      Alert.alert('Missing info', 'Enter weight (kg) and reps before saving this set.');
+      Alert.alert('Missing info', 'Enter weight and reps to log this set.');
       return;
     }
     dispatch({
@@ -526,87 +543,98 @@ function SetLogger({ exercise, accentColor }) {
     setSets(prev => prev.map((s, i) => i === idx ? { ...s, saved: true } : s));
   }
 
-  const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0] : '10';
+  const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0].trim() : '10';
 
   return (
     <View style={sl.container}>
-      <View style={sl.header}>
-        <Ionicons name="barbell-outline" size={13} color={accentColor} />
-        <Text style={[sl.headerText, { color: accentColor }]}>LOG SETS</Text>
+      {/* Header row */}
+      <View style={sl.tableHeader}>
+        <View style={sl.colNum} />
+        <Text style={[sl.colWeight, sl.colLabel]}>WEIGHT</Text>
+        <Text style={[sl.colReps, sl.colLabel]}>REPS</Text>
+        <Text style={[sl.colFeel, sl.colLabel]}>FEEL</Text>
+        <View style={sl.colSave} />
       </View>
+
       {sets.map((set, idx) => {
         const suggestion = getSuggestion(setLogs, exercise.id, idx, today);
         return (
-          <View key={idx} style={[sl.setRow, set.saved && sl.setRowSaved]}>
-            <View style={sl.setTopRow}>
-              <Text style={sl.setLabel}>Set {idx + 1}</Text>
-              {set.saved ? (
-                <View style={sl.savedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-                  <Text style={sl.savedText}>{set.weight} kg × {set.reps} reps</Text>
-                </View>
-              ) : suggestion ? (
-                <TouchableOpacity style={sl.suggestionRow} onPress={() => applysuggestion(idx)}>
-                  <Text style={sl.suggestionText}>↗ {suggestion.weight} kg · {suggestion.reason}</Text>
-                  <Text style={sl.useBtn}>Use</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={sl.noHistory}>No history — start light</Text>
-              )}
+          <View key={idx} style={[sl.row, set.saved && sl.rowSaved]}>
+            {/* Set number */}
+            <View style={[sl.colNum, sl.numCircle, set.saved && sl.numCircleDone]}>
+              <Text style={[sl.numText, set.saved && sl.numTextDone]}>{idx + 1}</Text>
             </View>
-            {!set.saved && (
-              <>
-                <View style={sl.inputRow}>
-                  <View style={sl.inputGroup}>
-                    <Text style={sl.inputLabel}>Weight (kg)</Text>
-                    <TextInput
-                      style={sl.input}
-                      value={set.weight}
-                      onChangeText={v => setField(idx, 'weight', v)}
-                      keyboardType="decimal-pad"
-                      placeholder={suggestion ? String(suggestion.weight) : '0'}
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  </View>
-                  <View style={sl.inputGroup}>
-                    <Text style={sl.inputLabel}>Reps done</Text>
-                    <TextInput
-                      style={sl.input}
-                      value={set.reps}
-                      onChangeText={v => setField(idx, 'reps', v)}
-                      keyboardType="number-pad"
-                      placeholder={targetReps}
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  </View>
-                </View>
-                <View style={sl.feedbackRow}>
-                  {['easy', 'good', 'hard'].map(fb => (
-                    <TouchableOpacity
-                      key={fb}
-                      style={[
-                        sl.fbBtn,
-                        set.feedback === fb && {
-                          backgroundColor: FEEDBACK_COLORS[fb] + '25',
-                          borderColor: FEEDBACK_COLORS[fb],
-                        },
-                      ]}
-                      onPress={() => setField(idx, 'feedback', fb)}
-                    >
-                      <Text style={[sl.fbText, set.feedback === fb && { color: FEEDBACK_COLORS[fb] }]}>
-                        {FEEDBACK_LABELS[fb]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity style={[sl.saveSetBtn, { backgroundColor: accentColor }]} onPress={() => handleSave(idx)}>
-                    <Ionicons name="checkmark" size={16} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              </>
+
+            {/* Weight */}
+            {set.saved ? (
+              <Text style={[sl.colWeight, sl.savedVal]}>{set.weight}kg</Text>
+            ) : (
+              <View style={[sl.colWeight, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+                <TextInput
+                  style={sl.inputBox}
+                  value={set.weight}
+                  onChangeText={v => setField(idx, 'weight', v)}
+                  keyboardType="decimal-pad"
+                  placeholder={suggestion != null ? String(suggestion) : '0'}
+                  placeholderTextColor={colors.textMuted}
+                />
+                <Text style={sl.unitText}>kg</Text>
+              </View>
             )}
+
+            {/* Reps */}
+            {set.saved ? (
+              <Text style={[sl.colReps, sl.savedVal]}>{set.reps}</Text>
+            ) : (
+              <TextInput
+                style={[sl.inputBox, sl.colReps]}
+                value={set.reps}
+                onChangeText={v => setField(idx, 'reps', v)}
+                keyboardType="number-pad"
+                placeholder={targetReps}
+                placeholderTextColor={colors.textMuted}
+              />
+            )}
+
+            {/* Feel */}
+            {set.saved ? (
+              <View style={[sl.colFeel, { justifyContent: 'center' }]}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              </View>
+            ) : (
+              <View style={[sl.colFeel, sl.feelRow]}>
+                {FEEL_OPTIONS.map(({ key, color }) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={[sl.feelDot, { backgroundColor: set.feedback === key ? color : color + '35' }]}
+                    onPress={() => setField(idx, 'feedback', key)}
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* Save */}
+            <TouchableOpacity
+              style={[sl.colSave, sl.saveBtn, set.saved ? sl.saveBtnDone : { backgroundColor: accentColor }]}
+              onPress={() => !set.saved && handleSave(idx)}
+              disabled={set.saved}
+            >
+              <Ionicons name="checkmark" size={14} color="#fff" />
+            </TouchableOpacity>
           </View>
         );
       })}
+
+      {/* Legend */}
+      <View style={sl.legend}>
+        {FEEL_OPTIONS.map(({ key, color, label }) => (
+          <View key={key} style={sl.legendItem}>
+            <View style={[sl.legendDot, { backgroundColor: color }]} />
+            <Text style={sl.legendText}>{label}</Text>
+          </View>
+        ))}
+        <Text style={sl.legendNote}>· affects next session suggestion</Text>
+      </View>
     </View>
   );
 }
@@ -724,6 +752,11 @@ const s = StyleSheet.create({
   weekPosture: { fontSize: 11, color: colors.accentLight, marginTop: 3, fontStyle: 'italic' },
   todayBadge: { backgroundColor: colors.accentDim, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   todayBadgeText: { fontSize: 10, color: colors.accentLight, fontWeight: '700' },
+  weekExList: { marginTop: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 },
+  weekExRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border + '60' },
+  weekExName: { fontSize: 13, color: colors.text, fontWeight: '600' },
+  weekExMeta: { fontSize: 11, color: colors.textSec, marginTop: 2 },
+  weekExMuscles: { fontSize: 10, color: colors.textMuted, marginTop: 1, fontStyle: 'italic' },
   tipCard: {
     flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12,
     padding: 14, marginTop: 4, borderWidth: 1, borderColor: colors.border, alignItems: 'flex-start',
@@ -777,35 +810,38 @@ const m = StyleSheet.create({
 });
 
 const sl = StyleSheet.create({
-  container: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, marginTop: 4 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  headerText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-  setRow: {
-    backgroundColor: colors.surface, borderRadius: 10, padding: 10,
-    marginBottom: 8, borderWidth: 1, borderColor: colors.border,
+  container: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, marginTop: 8 },
+  tableHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingHorizontal: 2 },
+  colLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  row: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingHorizontal: 2, gap: 6 },
+  rowSaved: { opacity: 0.75 },
+  colNum: { width: 30, alignItems: 'center', justifyContent: 'center' },
+  colWeight: { flex: 2 },
+  colReps: { flex: 1.4 },
+  colFeel: { flex: 1.8, alignItems: 'center' },
+  colSave: { width: 30 },
+  numCircle: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
   },
-  setRowSaved: { borderColor: colors.success + '50', backgroundColor: colors.success + '0D' },
-  setTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  setLabel: { fontSize: 12, color: colors.text, fontWeight: '700' },
-  suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  suggestionText: { fontSize: 11, color: colors.accentLight, fontStyle: 'italic' },
-  useBtn: { fontSize: 10, color: colors.accent, fontWeight: '700', borderWidth: 1, borderColor: colors.accent, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
-  noHistory: { fontSize: 11, color: colors.textMuted, fontStyle: 'italic' },
-  savedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  savedText: { fontSize: 12, color: colors.success, fontWeight: '600' },
-  inputRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  inputGroup: { flex: 1 },
-  inputLabel: { fontSize: 10, color: colors.textMuted, marginBottom: 4, fontWeight: '500', textTransform: 'uppercase' },
-  input: {
-    backgroundColor: colors.card, borderRadius: 8, paddingHorizontal: 10,
-    paddingVertical: 8, fontSize: 15, color: colors.text,
-    borderWidth: 1, borderColor: colors.border, textAlign: 'center', fontWeight: '600',
+  numCircleDone: { backgroundColor: colors.success + '20', borderColor: colors.success + '60' },
+  numText: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
+  numTextDone: { color: colors.success },
+  inputBox: {
+    backgroundColor: colors.surface, borderRadius: 8,
+    paddingHorizontal: 6, paddingVertical: 8,
+    fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.border,
+    textAlign: 'center', fontWeight: '600', flex: 1,
   },
-  feedbackRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  fbBtn: {
-    flex: 1, borderRadius: 7, paddingVertical: 6,
-    borderWidth: 1, borderColor: colors.border, alignItems: 'center',
-  },
-  fbText: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
-  saveSetBtn: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  unitText: { fontSize: 10, color: colors.textMuted },
+  savedVal: { fontSize: 13, color: colors.success, fontWeight: '700', textAlign: 'center' },
+  feelRow: { flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center' },
+  feelDot: { width: 16, height: 16, borderRadius: 8 },
+  saveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  saveBtnDone: { backgroundColor: colors.success + '40' },
+  legend: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 10, color: colors.textMuted },
+  legendNote: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
 });

@@ -373,7 +373,7 @@ function EmptyChart({ message }) {
 }
 
 const WORKOUT_COLORS = {
-  push: colors.accent,
+  push: '#2563EB',
   pull: colors.info,
   legs_core: colors.success,
   posture: colors.warning,
