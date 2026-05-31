@@ -131,7 +131,6 @@ export function streamChatMessage(messages, apiKey, userProfile, generatedPlan, 
   xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.setRequestHeader('x-api-key', apiKey);
   xhr.setRequestHeader('anthropic-version', '2023-06-01');
-  xhr.setRequestHeader('anthropic-beta', 'prompt-caching-1');
 
   let cursor = 0;
 
@@ -173,13 +172,7 @@ export function streamChatMessage(messages, apiKey, userProfile, generatedPlan, 
     model: MODEL,
     max_tokens: 1024,
     stream: true,
-    system: [
-      {
-        type: 'text',
-        text: buildSystemPrompt(userProfile, generatedPlan, progress),
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
+    system: buildSystemPrompt(userProfile, generatedPlan, progress),
     messages: messages.map(m => ({ role: m.role, content: m.content })),
   }));
 }
