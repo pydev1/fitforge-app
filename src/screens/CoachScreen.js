@@ -14,21 +14,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
-import { sendChatMessage } from '../services/anthropicService';
+import { streamChatMessage } from '../services/anthropicService';
 import { colors } from '../theme/colors';
 
 const QUICK_PROMPTS = [
-  "What should I eat today?",
-  "Modify today's workout",
-  "I'm feeling tired/sore",
-  "How to lose belly fat?",
-  "Fix my posture fast",
-  "Progressive overload tips",
+  "What's my workout today?",
+  "I'm sore, modify today",
+  "I skipped yesterday, now what?",
+  "Show me this week's plan",
+  "Nutrition tips for my goal",
+  "Fix my posture",
 ];
 
 function buildWelcomeMessage(profile) {
   if (!profile?.name) {
-    return "Hey! I'm your FitForge AI Coach 💪\n\nI'm here to give you personalised fitness advice. What can I help with today?";
+    return "Hey! I'm your personal fitness coach.\n\nTell me about yourself and I'll put together a plan that actually fits your life. What are you working towards?";
   }
   const goalStr = profile.goals?.length
     ? profile.goals[0].replace('_', ' ')
@@ -36,13 +36,14 @@ function buildWelcomeMessage(profile) {
   const equipStr = profile.equipment?.length
     ? profile.equipment.map(e => e.replace('_', ' ')).join(', ')
     : 'bodyweight training';
-  return `Hey ${profile.name}! I'm your FitForge AI Coach 💪\n\nI know your full profile — ${profile.height ?? '?'}cm, ${profile.weight ?? '?'}kg, ${profile.fitnessLevel ?? 'beginner'} level. Your primary goal is ${goalStr} using ${equipStr}.\n\nEvery answer I give is tailored specifically to you. What can I help with today?`;
+  return `Hey ${profile.name}! Good to see you.\n\nI've got your full profile — ${profile.height ?? '?'}cm, ${profile.weight ?? '?'}kg, ${profile.fitnessLevel ?? 'beginner'} level, goal: ${goalStr}. You've got ${equipStr} to work with.\n\nWhat do you need today?`;
 }
 
 export default function CoachScreen({ navigation }) {
   const { state, dispatch } = useApp();
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const scrollRef = useRef(null);
 
   const WELCOME_MESSAGE = {
@@ -57,17 +58,17 @@ export default function CoachScreen({ navigation }) {
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [messages, loading]);
+  }, [messages, isStreaming, streamingText]);
 
-  async function send(text) {
+  function send(text) {
     const content = (text || input).trim();
-    if (!content || loading) return;
+    if (!content || isStreaming) return;
     setInput('');
 
     if (!state.apiKey) {
       Alert.alert(
         'API Key Required',
-        'Add your Anthropic API key in Settings to use the AI Coach.',
+        'Add your Anthropic API key in Settings to chat with your coach.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
@@ -78,19 +79,35 @@ export default function CoachScreen({ navigation }) {
 
     const userMsg = { role: 'user', content, id: Date.now().toString() };
     dispatch({ type: 'ADD_MESSAGE', payload: userMsg });
-    setLoading(true);
+    setIsStreaming(true);
+    setStreamingText('');
 
-    try {
-      const history = state.chatHistory.length === 0 ? [] : state.chatHistory;
-      const allMessages = [...history, userMsg];
-      const reply = await sendChatMessage(allMessages, state.apiKey, state.userProfile, state.generatedPlan, state.progress);
-      const aiMsg = { role: 'assistant', content: reply, id: (Date.now() + 1).toString() };
-      dispatch({ type: 'ADD_MESSAGE', payload: aiMsg });
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Something went wrong. Check your API key in Settings.');
-    } finally {
-      setLoading(false);
-    }
+    const history = state.chatHistory.length === 0 ? [] : state.chatHistory;
+    const allMessages = [...history, userMsg];
+    let fullText = '';
+
+    streamChatMessage(
+      allMessages,
+      state.apiKey,
+      state.userProfile,
+      state.generatedPlan,
+      state.progress,
+      (chunk) => {
+        fullText += chunk;
+        setStreamingText(fullText);
+      },
+      () => {
+        const aiMsg = { role: 'assistant', content: fullText, id: (Date.now() + 1).toString() };
+        dispatch({ type: 'ADD_MESSAGE', payload: aiMsg });
+        setStreamingText('');
+        setIsStreaming(false);
+      },
+      (err) => {
+        Alert.alert('Error', err.message || 'Something went wrong. Check your API key in Settings.');
+        setStreamingText('');
+        setIsStreaming(false);
+      },
+    );
   }
 
   function clearChat() {
@@ -107,11 +124,13 @@ export default function CoachScreen({ navigation }) {
         <View style={s.header}>
           <View style={s.headerLeft}>
             <View style={s.avatar}>
-              <Ionicons name="sparkles" size={18} color={colors.white} />
+              <Ionicons name="person" size={18} color={colors.white} />
             </View>
             <View>
-              <Text style={s.headerTitle}>AI Coach</Text>
-              <Text style={s.headerSub}>Powered by Claude · Personalised for you</Text>
+              <Text style={s.headerTitle}>Your Coach</Text>
+              <Text style={s.headerSub}>
+                {isStreaming ? 'Typing...' : 'Online · Ready to help'}
+              </Text>
             </View>
           </View>
           <TouchableOpacity onPress={clearChat} style={s.clearBtn}>
@@ -127,7 +146,7 @@ export default function CoachScreen({ navigation }) {
           contentContainerStyle={s.quickContent}
         >
           {QUICK_PROMPTS.map((p) => (
-            <TouchableOpacity key={p} style={s.quickChip} onPress={() => send(p)} disabled={loading}>
+            <TouchableOpacity key={p} style={s.quickChip} onPress={() => send(p)} disabled={isStreaming}>
               <Text style={s.quickChipText}>{p}</Text>
             </TouchableOpacity>
           ))}
@@ -143,7 +162,13 @@ export default function CoachScreen({ navigation }) {
           {messages.map((msg) => (
             <Bubble key={msg.id} message={msg} />
           ))}
-          {loading && <TypingIndicator />}
+          {isStreaming && !streamingText && <TypingIndicator />}
+          {isStreaming && !!streamingText && (
+            <Bubble
+              message={{ role: 'assistant', content: streamingText, id: 'streaming' }}
+              streaming
+            />
+          )}
         </ScrollView>
 
         {/* Input */}
@@ -152,18 +177,18 @@ export default function CoachScreen({ navigation }) {
             style={s.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask your coach anything..."
+            placeholder="Message your coach..."
             placeholderTextColor={colors.textMuted}
             multiline
             maxLength={500}
             onSubmitEditing={() => send()}
           />
           <TouchableOpacity
-            style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnDisabled]}
+            style={[s.sendBtn, (!input.trim() || isStreaming) && s.sendBtnDisabled]}
             onPress={() => send()}
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || isStreaming}
           >
-            {loading
+            {isStreaming
               ? <ActivityIndicator size="small" color={colors.white} />
               : <Ionicons name="send" size={18} color={colors.white} />
             }
@@ -174,18 +199,18 @@ export default function CoachScreen({ navigation }) {
   );
 }
 
-function Bubble({ message }) {
+function Bubble({ message, streaming }) {
   const isUser = message.role === 'user';
   return (
     <View style={[s.bubbleWrap, isUser ? s.bubbleWrapUser : s.bubbleWrapAI]}>
       {!isUser && (
-        <View style={s.aiBubbleAvatar}>
-          <Ionicons name="sparkles" size={12} color={colors.white} />
+        <View style={s.coachAvatar}>
+          <Text style={s.coachAvatarText}>FC</Text>
         </View>
       )}
       <View style={[s.bubble, isUser ? s.bubbleUser : s.bubbleAI]}>
         <Text style={[s.bubbleText, isUser ? s.bubbleTextUser : s.bubbleTextAI]}>
-          {message.content}
+          {message.content}{streaming ? '▋' : ''}
         </Text>
       </View>
     </View>
@@ -195,8 +220,8 @@ function Bubble({ message }) {
 function TypingIndicator() {
   return (
     <View style={[s.bubbleWrap, s.bubbleWrapAI]}>
-      <View style={s.aiBubbleAvatar}>
-        <Ionicons name="sparkles" size={12} color={colors.white} />
+      <View style={s.coachAvatar}>
+        <Text style={s.coachAvatarText}>FC</Text>
       </View>
       <View style={[s.bubble, s.bubbleAI, s.typingBubble]}>
         <View style={s.dots}>
@@ -222,9 +247,9 @@ const s = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
@@ -257,15 +282,16 @@ const s = StyleSheet.create({
   bubbleWrap: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 4 },
   bubbleWrapUser: { justifyContent: 'flex-end' },
   bubbleWrapAI: { justifyContent: 'flex-start', gap: 8 },
-  aiBubbleAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  coachAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
+  coachAvatarText: { fontSize: 9, color: colors.white, fontWeight: '700' },
   bubble: {
     maxWidth: '80%',
     borderRadius: 18,

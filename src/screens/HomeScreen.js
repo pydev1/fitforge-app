@@ -55,7 +55,7 @@ export default function HomeScreen({ navigation }) {
         <View style={s.header}>
           <View>
             <Text style={s.greeting}>{getGreeting()},</Text>
-            <Text style={s.name}>{userProfile.name || 'Athlete'} 👊</Text>
+            <Text style={s.name}>{userProfile.name || 'Athlete'}</Text>
           </View>
           <TouchableOpacity style={s.settingsBtn} onPress={() => navigation.navigate('Settings')}>
             <Ionicons name="settings-sharp" size={22} color={colors.textSec} />
@@ -106,7 +106,7 @@ export default function HomeScreen({ navigation }) {
         {/* Quick Actions */}
         <Text style={s.section}>Quick Actions</Text>
         <View style={s.actionsRow}>
-          <Action icon="chatbubble-ellipses" label="AI Coach" color={colors.accent} onPress={() => navigation.navigate('Coach')} />
+          <Action icon="chatbubble-ellipses" label="Coach" color={colors.accent} onPress={() => navigation.navigate('Coach')} />
           <Action icon="camera" label="Photo Scan" color={colors.secondary} onPress={() => navigation.navigate('Scan')} />
           <Action icon="stats-chart" label="Progress" color={colors.success} onPress={() => navigation.navigate('Progress')} />
           <Action icon="body" label="Posture Fix" color={colors.warning} onPress={() => navigation.navigate('Workout', { tab: 'posture' })} />

@@ -120,33 +120,68 @@ Please respond with:
 Keep it structured, practical, and specific to their equipment.`;
 }
 
-export async function sendChatMessage(messages, apiKey, userProfile, generatedPlan, progress) {
+export function streamChatMessage(messages, apiKey, userProfile, generatedPlan, progress, onChunk, onDone, onError) {
   if (!apiKey) {
-    throw new Error('No API key set. Please add your Anthropic API key in Settings.');
+    onError(new Error('No API key set. Please add your Anthropic API key in Settings.'));
+    return;
   }
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1024,
-      system: buildSystemPrompt(userProfile, generatedPlan, progress),
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
-    }),
-  });
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', API_URL, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.setRequestHeader('x-api-key', apiKey);
+  xhr.setRequestHeader('anthropic-version', '2023-06-01');
+  xhr.setRequestHeader('anthropic-beta', 'prompt-caching-1');
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${response.status}`);
-  }
+  let cursor = 0;
 
-  const data = await response.json();
-  return data.content[0].text;
+  xhr.onprogress = () => {
+    const raw = xhr.responseText.slice(cursor);
+    cursor = xhr.responseText.length;
+    for (const line of raw.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6).trim();
+      if (!payload) continue;
+      try {
+        const ev = JSON.parse(payload);
+        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          onChunk(ev.delta.text);
+        }
+        if (ev.type === 'error') {
+          onError(new Error(ev.error?.message || 'Stream error'));
+        }
+      } catch {}
+    }
+  };
+
+  xhr.onload = () => {
+    if (xhr.status >= 400) {
+      try {
+        const err = JSON.parse(xhr.responseText);
+        onError(new Error(err?.error?.message || `API error ${xhr.status}`));
+      } catch {
+        onError(new Error(`API error ${xhr.status}`));
+      }
+    } else {
+      onDone();
+    }
+  };
+
+  xhr.onerror = () => onError(new Error('Network error. Check your connection.'));
+
+  xhr.send(JSON.stringify({
+    model: MODEL,
+    max_tokens: 1024,
+    stream: true,
+    system: [
+      {
+        type: 'text',
+        text: buildSystemPrompt(userProfile, generatedPlan, progress),
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+  }));
 }
 
 export async function analyzePhoto(base64Image, mimeType, apiKey, userProfile) {
