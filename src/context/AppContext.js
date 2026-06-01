@@ -9,6 +9,8 @@ const STORAGE_KEY = '@fitforge_v3';
 const defaultState = {
   apiKey: '',
   isOnboarded: false,
+  reminderEnabled: false,
+  reminderHour: 19,
   userProfile: {
     name: '',
     gender: '',
@@ -77,6 +79,8 @@ function reducer(state, action) {
           setLogs: [...(state.progress.setLogs || []), action.payload],
         },
       };
+    case 'SET_REMINDER':
+      return { ...state, reminderEnabled: action.payload.enabled, reminderHour: action.payload.hour ?? state.reminderHour };
     case 'ADD_MESSAGE':
       return { ...state, chatHistory: [...state.chatHistory, action.payload] };
     case 'CLEAR_CHAT':

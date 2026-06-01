@@ -52,6 +52,12 @@ export default function HomeScreen({ navigation }) {
   const thisWeekDone = getThisWeekCompleted(progress.completedWorkouts);
   const today = new Date().toISOString().split('T')[0];
 
+  const sortedWorkouts = [...progress.completedWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+  const lastWorkout = sortedWorkouts[0];
+  const daysSinceLast = lastWorkout
+    ? Math.round((Date.now() - new Date(lastWorkout.date).getTime()) / 86400000)
+    : null;
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
@@ -75,6 +81,20 @@ export default function HomeScreen({ navigation }) {
           <View style={s.statsDivider} />
           <StatItem value={totalWorkouts} unit="" label="Sessions" />
         </View>
+
+        {/* Absence warning */}
+        {daysSinceLast !== null && daysSinceLast >= 3 && (
+          <TouchableOpacity style={s.absenceCard} onPress={() => navigation.navigate('Coach')} activeOpacity={0.85}>
+            <Ionicons name="warning-outline" size={18} color={colors.warning} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={s.absenceTitle}>
+                {daysSinceLast >= 7 ? `${daysSinceLast} days without training` : `${daysSinceLast} days since your last session`}
+              </Text>
+              <Text style={s.absenceSub}>Tap to talk to your coach — let's get back on track</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
 
         {/* Today's Workout */}
         <View style={s.sectionRow}>
@@ -366,4 +386,18 @@ const s = StyleSheet.create({
   },
   actionTitle: { fontSize: 14, color: colors.text, fontWeight: '700', marginBottom: 2 },
   actionSub: { fontSize: 11, color: colors.textMuted },
+
+  absenceCard: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: colors.warningDim,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.warning + '40',
+  },
+  absenceTitle: { fontSize: 13, color: colors.warning, fontWeight: '700' },
+  absenceSub: { fontSize: 11, color: colors.textSec, marginTop: 2 },
 });

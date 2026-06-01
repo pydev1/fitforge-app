@@ -26,17 +26,32 @@ const QUICK_PROMPTS = [
   "Fix my posture",
 ];
 
-function buildWelcomeMessage(profile) {
+function buildWelcomeMessage(profile, progress) {
   if (!profile?.name) {
     return "Hey! I'm your personal fitness coach.\n\nTell me about yourself and I'll put together a plan that actually fits your life. What are you working towards?";
   }
-  const goalStr = profile.goals?.length
-    ? profile.goals[0].replace('_', ' ')
-    : 'general fitness';
-  const equipStr = profile.equipment?.length
-    ? profile.equipment.map(e => e.replace('_', ' ')).join(', ')
-    : 'bodyweight training';
-  return `Hey ${profile.name}! Good to see you.\n\nI've got your full profile — ${profile.height ?? '?'}cm, ${profile.weight ?? '?'}kg, ${profile.fitnessLevel ?? 'beginner'} level, goal: ${goalStr}. You've got ${equipStr} to work with.\n\nWhat do you need today?`;
+
+  const today = new Date().toISOString().split('T')[0];
+  const sorted = [...(progress?.completedWorkouts || [])].sort((a, b) => b.date.localeCompare(a.date));
+  const lastWorkout = sorted[0];
+  const daysSinceLast = lastWorkout
+    ? Math.round((Date.now() - new Date(lastWorkout.date).getTime()) / 86400000)
+    : null;
+  const todayLogged = sorted.some(w => w.date === today);
+
+  if (daysSinceLast !== null && daysSinceLast >= 7) {
+    return `${profile.name} — you haven't logged a session in ${daysSinceLast} days.\n\nI'm not going to skip past that. What's been going on? Let's talk about it and get you back to just one session this week.`;
+  }
+
+  if (daysSinceLast !== null && daysSinceLast >= 3) {
+    return `Hey ${profile.name}. It's been ${daysSinceLast} days since your last session.\n\nA real coach notices that. What happened? And more importantly — what would make it easier to train today?`;
+  }
+
+  if (todayLogged) {
+    return `Good work today, ${profile.name}. Session logged.\n\nAnything you want to review — form, nutrition, tomorrow's plan?`;
+  }
+
+  return `Hey ${profile.name}. What do you need today?`;
 }
 
 export default function CoachScreen({ navigation }) {
@@ -48,7 +63,7 @@ export default function CoachScreen({ navigation }) {
 
   const WELCOME_MESSAGE = {
     role: 'assistant',
-    content: buildWelcomeMessage(state.userProfile),
+    content: buildWelcomeMessage(state.userProfile, state.progress),
     id: 'welcome',
   };
 

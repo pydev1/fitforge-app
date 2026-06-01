@@ -82,7 +82,27 @@ Never recommend equipment the user doesn't own. Always align advice with their s
       historySection += `- ${w.date}: ${label}\n`;
     });
     basePrompt += historySection;
-    basePrompt += '\nUse this history to answer questions like "what did I train last?" or "what should I do today?" without asking.';
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const todayDayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  const sortedWorkouts = [...(progress?.completedWorkouts || [])].sort((a, b) => b.date.localeCompare(a.date));
+  const lastWorkout = sortedWorkouts[0];
+  const daysSinceLast = lastWorkout
+    ? Math.round((Date.now() - new Date(lastWorkout.date).getTime()) / 86400000)
+    : null;
+  const todayLogged = sortedWorkouts.some(w => w.date === today);
+
+  let contextSection = `\n\n**Today's Context**\n- Date: ${todayDayName}, ${today}\n- Today's workout logged: ${todayLogged ? 'Yes' : 'No'}`;
+  contextSection += daysSinceLast !== null
+    ? `\n- Days since last logged workout: ${daysSinceLast}`
+    : `\n- No workouts logged yet`;
+  basePrompt += contextSection;
+
+  if (daysSinceLast !== null && daysSinceLast >= 3) {
+    basePrompt += `\n\n**ACCOUNTABILITY — Act on this**\nThe user has not trained in ${daysSinceLast} days. A real coach notices and says something. Acknowledge the absence directly and ask what happened — before answering anything else. Be honest but not harsh. Then focus only on getting them back to ONE session, not the whole plan.`;
+  } else if (!todayLogged) {
+    basePrompt += `\n\nToday's session hasn't been logged yet. If it's relevant, check in on whether they've done it.`;
   }
 
   return basePrompt;

@@ -32,7 +32,8 @@
           "photosPermission": "FitForge needs photo access to analyse your exercise form and body composition.",
           "cameraPermission": "FitForge needs camera access to analyse your exercise form and body composition."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

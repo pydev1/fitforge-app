@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert,
+  ScrollView, Alert, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,12 +33,21 @@ function prettyLabel(str) {
   return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+const REMINDER_HOURS = [6, 7, 8, 9, 12, 17, 18, 19, 20, 21];
+function formatHour(h) {
+  if (h === 12) return '12 PM';
+  if (h === 0) return '12 AM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
 export default function SettingsScreen({ navigation }) {
   const { state, dispatch } = useApp();
   const p = state.userProfile;
 
   const [apiKey, setApiKey] = useState(state.apiKey);
   const [showKey, setShowKey] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(state.reminderEnabled ?? false);
+  const [reminderHour, setReminderHour] = useState(state.reminderHour ?? 19);
 
   // Basic info
   const [name, setName] = useState(p.name || '');
@@ -62,6 +71,7 @@ export default function SettingsScreen({ navigation }) {
   }
 
   function save() {
+    dispatch({ type: 'SET_REMINDER', payload: { enabled: reminderEnabled, hour: reminderHour } });
     dispatch({ type: 'SET_API_KEY', payload: apiKey.trim() });
     const updatedProfile = {
       ...p,
@@ -271,6 +281,42 @@ export default function SettingsScreen({ navigation }) {
           <Text style={s.regenNote}>Rebuilds your entire plan from your updated profile settings above.</Text>
         </View>
 
+        {/* Reminders */}
+        <Section title="Daily Reminder" icon="notifications-outline">
+          <View style={s.reminderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.reminderLabel}>Daily workout reminder</Text>
+              <Text style={s.reminderSub}>
+                {reminderEnabled ? `Fires every day at ${formatHour(reminderHour)}` : 'Off — you\'re on your own'}
+              </Text>
+            </View>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={setReminderEnabled}
+              trackColor={{ false: colors.border, true: colors.accentDim }}
+              thumbColor={reminderEnabled ? colors.accent : colors.textMuted}
+            />
+          </View>
+          {reminderEnabled && (
+            <>
+              <Label text="Remind me at" style={{ marginTop: 12 }} />
+              <View style={s.chipRow}>
+                {REMINDER_HOURS.map(h => (
+                  <TouchableOpacity
+                    key={h}
+                    style={[s.numChip, { width: 'auto', paddingHorizontal: 12 }, reminderHour === h && s.numChipActive]}
+                    onPress={() => setReminderHour(h)}
+                  >
+                    <Text style={[s.numChipText, { fontSize: 13 }, reminderHour === h && s.numChipTextActive]}>
+                      {formatHour(h)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+        </Section>
+
         {/* About */}
         <Section title="About" icon="information-circle-outline">
           <InfoRow label="App" value="FitForge" />
@@ -402,6 +448,9 @@ const s = StyleSheet.create({
   },
   regenBtnText: { fontSize: 14, color: '#fff', fontWeight: '700' },
   regenNote: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 16 },
+  reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reminderLabel: { fontSize: 14, color: colors.text, fontWeight: '600' },
+  reminderSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
 });
 
 const ss = StyleSheet.create({
