@@ -373,16 +373,24 @@ function EmptyChart({ message }) {
 }
 
 const WORKOUT_COLORS = {
-  push: '#2563EB',
-  pull: colors.info,
-  legs_core: colors.success,
+  push:  '#7C3AED',
+  pull:  '#3B82F6',
+  legs:  '#10B981',
+  full:  '#F43F5E',
+  core:  '#F59E0B',
+  upper: '#8B5CF6',
+  lower: '#06B6D4',
   posture: colors.warning,
 };
 
 const WORKOUT_LABELS = {
-  push: 'Push Day',
-  pull: 'Pull Day',
-  legs_core: 'Legs + Core',
+  push:  'Push Day',
+  pull:  'Pull Day',
+  legs:  'Legs + Core',
+  full:  'Full Body',
+  core:  'Core Day',
+  upper: 'Upper Body',
+  lower: 'Lower Body',
   posture: 'Posture Session',
 };
 

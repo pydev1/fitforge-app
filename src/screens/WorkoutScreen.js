@@ -98,9 +98,22 @@ export default function WorkoutScreen({ route }) {
 
 /* ─── Today Tab ─────────────────────────────────────────────────── */
 
+function makeEmptySets(count) {
+  return Array.from({ length: count }, () => ({ weight: '', reps: '', feedback: null, saved: false }));
+}
+
 function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo }) {
+  const [allSetData, setAllSetData] = React.useState({});
   const today = new Date().toISOString().split('T')[0];
   const isDone = completedWorkouts.some(w => w.date === today);
+
+  function getSetData(exercise) {
+    return allSetData[exercise.id] || makeEmptySets(exercise.sets);
+  }
+
+  function handleSetDataChange(exerciseId, newSets) {
+    setAllSetData(prev => ({ ...prev, [exerciseId]: newSets }));
+  }
 
   if (!workout) {
     return (
@@ -155,6 +168,8 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
           accentColor={workout.color}
           onInfo={() => onInfo(ex)}
           isToday
+          setData={getSetData(ex)}
+          onSetDataChange={(newSets) => handleSetDataChange(ex.id, newSets)}
         />
       ))}
 
@@ -232,7 +247,7 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange }) {
   return (
     <TouchableOpacity style={s.exCard} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
@@ -264,7 +279,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
               <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
             </View>
           )}
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} />}
+          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} />}
         </View>
       )}
     </TouchableOpacity>
@@ -507,17 +522,13 @@ function getSuggestion(setLogs, exerciseId, setIdx, today) {
   return weight;
 }
 
-function SetLogger({ exercise, accentColor }) {
+function SetLogger({ exercise, accentColor, sets, onSetsChange }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
   const today = new Date().toISOString().split('T')[0];
 
-  const [sets, setSets] = React.useState(() =>
-    Array.from({ length: exercise.sets }, () => ({ weight: '', reps: '', feedback: null, saved: false }))
-  );
-
   function setField(idx, field, value) {
-    setSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+    onSetsChange(sets.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   }
 
   function handleSave(idx) {
@@ -540,7 +551,7 @@ function SetLogger({ exercise, accentColor }) {
         feedback: set.feedback || 'good',
       },
     });
-    setSets(prev => prev.map((s, i) => i === idx ? { ...s, saved: true } : s));
+    onSetsChange(sets.map((s, i) => i === idx ? { ...s, saved: true } : s));
   }
 
   const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0].trim() : '10';
