@@ -1,3 +1,5 @@
+import { daysBetweenLocalDateKeys, toLocalDateKey } from '../utils/date';
+
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
@@ -84,12 +86,12 @@ Never recommend equipment the user doesn't own. Always align advice with their s
     basePrompt += historySection;
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
   const todayDayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
   const sortedWorkouts = [...(progress?.completedWorkouts || [])].sort((a, b) => b.date.localeCompare(a.date));
   const lastWorkout = sortedWorkouts[0];
   const daysSinceLast = lastWorkout
-    ? Math.round((Date.now() - new Date(lastWorkout.date).getTime()) / 86400000)
+    ? daysBetweenLocalDateKeys(lastWorkout.date, today)
     : null;
   const todayLogged = sortedWorkouts.some(w => w.date === today);
 

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { fromLocalDateKey, toLocalDateKey } from '../utils/date';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 40;
@@ -56,7 +57,7 @@ function getStreak(completedWorkouts) {
   let cursor = new Date();
   cursor.setHours(0, 0, 0, 0);
   for (const w of sorted) {
-    const d = new Date(w.date);
+    const d = fromLocalDateKey(w.date);
     const diff = Math.round((cursor - d) / 86400000);
     if (diff <= 1) {
       streak++;
@@ -66,6 +67,34 @@ function getStreak(completedWorkouts) {
     }
   }
   return streak;
+}
+
+function prettyGoal(goal) {
+  return String(goal || 'general_fitness')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function buildGoalMessage(userProfile, firstWeight, firstWaist) {
+  const primaryGoal = userProfile.goals?.[0] || 'general_fitness';
+  const startingWeight = firstWeight?.value ?? userProfile.weight;
+  const startingWaist = firstWaist?.value ?? userProfile.waist;
+
+  const goalCopy = {
+    lose_fat: 'Lose fat while protecting strength and lean muscle.',
+    build_muscle: 'Build muscle with progressive overload and enough recovery.',
+    recomposition: 'Improve body composition by gaining strength while trimming waist size.',
+    improve_posture: 'Build strength and mobility that supports better posture every day.',
+    endurance: 'Build work capacity with consistent sessions and controlled recovery.',
+    general_fitness: 'Build a repeatable training habit and improve your baseline fitness.',
+  }[primaryGoal] || 'Build a repeatable training habit and improve your baseline fitness.';
+
+  const metrics = [
+    startingWeight ? `Starting weight: ${startingWeight}kg` : null,
+    startingWaist ? `Starting waist: ${startingWaist}cm` : null,
+  ].filter(Boolean).join(' · ');
+
+  return `${prettyGoal(primaryGoal)}: ${goalCopy}\n${metrics || 'Log your first measurements to set a baseline.'}\nTrack trends over weeks, not single-day swings.`;
 }
 
 export default function ProgressScreen() {
@@ -94,9 +123,10 @@ export default function ProgressScreen() {
   const waistChartData = progress.waist.length >= 2
     ? buildChartData(progress.waist, 6)
     : null;
+  const goalMessage = buildGoalMessage(userProfile, firstWeight, firstWaist);
 
   function saveLog() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalDateKey();
     if (weightInput) {
       const val = parseFloat(weightInput);
       if (isNaN(val) || val < 30 || val > 300) {
@@ -253,11 +283,7 @@ export default function ProgressScreen() {
         <View style={s.goalCard}>
           <Ionicons name="trophy-outline" size={20} color={colors.warning} style={{ marginBottom: 8 }} />
           <Text style={s.goalTitle}>Your Goal</Text>
-          <Text style={s.goalText}>
-            Body recomposition: lose belly fat while gaining lean muscle.{'\n'}
-            Starting waist: {firstWaist?.value ?? userProfile.waist}cm → Target: under 80cm.{'\n'}
-            Stay consistent — recomp takes 3–6 months to show clearly.
-          </Text>
+          <Text style={s.goalText}>{goalMessage}</Text>
         </View>
 
         <View style={{ height: 24 }} />

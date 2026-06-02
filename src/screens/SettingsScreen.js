@@ -70,10 +70,8 @@ export default function SettingsScreen({ navigation }) {
     setArr(arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val]);
   }
 
-  function save() {
-    dispatch({ type: 'SET_REMINDER', payload: { enabled: reminderEnabled, hour: reminderHour } });
-    dispatch({ type: 'SET_API_KEY', payload: apiKey.trim() });
-    const updatedProfile = {
+  function buildProfile() {
+    return {
       ...p,
       name: name.trim() || p.name,
       gender,
@@ -89,6 +87,25 @@ export default function SettingsScreen({ navigation }) {
       restDays,
       jobType,
     };
+  }
+
+  function validateSchedule() {
+    const trainingDayCount = ALL_DAYS.filter(day => !restDays.includes(day)).length;
+    if (trainingDayCount < daysPerWeek) {
+      Alert.alert(
+        'Schedule mismatch',
+        `You selected ${daysPerWeek} training days, but your rest days leave only ${trainingDayCount}. Remove a rest day or lower training days per week.`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  function save() {
+    if (!validateSchedule()) return;
+    dispatch({ type: 'SET_REMINDER', payload: { enabled: reminderEnabled, hour: reminderHour } });
+    dispatch({ type: 'SET_API_KEY', payload: apiKey.trim() });
+    const updatedProfile = buildProfile();
     dispatch({ type: 'UPDATE_PROFILE', payload: updatedProfile });
     Alert.alert('Saved!', 'Your profile has been updated.', [
       { text: 'OK', onPress: () => navigation.goBack() },
@@ -104,18 +121,9 @@ export default function SettingsScreen({ navigation }) {
         {
           text: 'Regenerate',
           onPress: () => {
-            const updatedProfile = {
-              ...p,
-              name: name.trim() || p.name,
-              gender, age: parseInt(age) || p.age,
-              height: parseFloat(height) || p.height,
-              weight: parseFloat(weight) || p.weight,
-              waist: waist ? parseFloat(waist) : p.waist,
-              bodyType, fitnessLevel, goals, equipment,
-              workoutDaysPerWeek: daysPerWeek, restDays, jobType,
-            };
-            dispatch({ type: 'UPDATE_PROFILE', payload: updatedProfile });
-            dispatch({ type: 'REGENERATE_PLAN' });
+            if (!validateSchedule()) return;
+            const updatedProfile = buildProfile();
+            dispatch({ type: 'REGENERATE_PLAN', payload: updatedProfile });
             Alert.alert('Plan Updated! 🎉', 'Your new workout plan is ready.');
           },
         },
@@ -270,6 +278,10 @@ export default function SettingsScreen({ navigation }) {
               </TouchableOpacity>
             ))}
           </View>
+          <Text style={s.scheduleHint}>
+            {ALL_DAYS.filter(day => !restDays.includes(day)).length} available training day
+            {ALL_DAYS.filter(day => !restDays.includes(day)).length === 1 ? '' : 's'} for your {daysPerWeek}-day target.
+          </Text>
         </Section>
 
         {/* Regenerate Plan */}
@@ -451,6 +463,7 @@ const s = StyleSheet.create({
   reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   reminderLabel: { fontSize: 14, color: colors.text, fontWeight: '600' },
   reminderSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  scheduleHint: { fontSize: 11, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
 });
 
 const ss = StyleSheet.create({

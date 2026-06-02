@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
+import { toLocalDateKey } from '../utils/date';
+import { getProgramWeek, getProgressionModifier, applyProgression } from '../utils/progression';
 
 const TABS = ['Today', 'Weekly', 'Posture Guide'];
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -36,7 +38,7 @@ export default function WorkoutScreen({ route }) {
     : 0;
 
   function markComplete() {
-    const date = new Date().toISOString().split('T')[0];
+    const date = toLocalDateKey();
     const alreadyDone = progress.completedWorkouts.some(w => w.date === date);
     if (alreadyDone) {
       Alert.alert('Already logged', "Today's session is already marked as complete!");
@@ -98,17 +100,48 @@ export default function WorkoutScreen({ route }) {
 
 /* ─── Today Tab ─────────────────────────────────────────────────── */
 
-function makeEmptySets(count) {
-  return Array.from({ length: count }, () => ({ weight: '', reps: '', feedback: null, saved: false }));
+function makeEmptySets(exercise, setLogs, today) {
+  return Array.from({ length: exercise.sets }, (_, idx) => {
+    const savedLog = setLogs.find(log =>
+      log.date === today &&
+      log.exerciseId === exercise.id &&
+      log.setNumber === idx + 1
+    );
+    return savedLog
+      ? {
+          weight: String(savedLog.weight),
+          reps: String(savedLog.reps),
+          feedback: savedLog.feedback,
+          saved: true,
+        }
+      : { weight: '', reps: '', feedback: null, saved: false };
+  });
 }
 
+const PHASE_COLORS = {
+  'Base':       colors.info,
+  'Volume+':    colors.accent,
+  'Intensity+': colors.secondary,
+  'Deload':     colors.success,
+};
+
 function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo }) {
+  const { state } = useApp();
   const [allSetData, setAllSetData] = React.useState({});
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
+  const programWeek = getProgramWeek(completedWorkouts);
+  const mod = getProgressionModifier(programWeek);
+
   function getSetData(exercise) {
-    return allSetData[exercise.id] || makeEmptySets(exercise.sets);
+    const setLogs = state.progress.setLogs || [];
+    const cached = allSetData[exercise.id];
+    if (!cached) return makeEmptySets(exercise, setLogs, today);
+    if (cached.length < exercise.sets) {
+      return [...cached, ...Array.from({ length: exercise.sets - cached.length }, () => ({ weight: '', reps: '', feedback: null, saved: false }))];
+    }
+    return cached.slice(0, exercise.sets);
   }
 
   function handleSetDataChange(exerciseId, newSets) {
@@ -158,20 +191,34 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         />
       )}
 
+      <View style={[s.progressionBanner, { borderColor: PHASE_COLORS[mod.label] + '50' }]}>
+        <View style={s.progressionLeft}>
+          <Text style={s.progressionWeek}>Week {programWeek} of 4</Text>
+          <View style={[s.progressionPill, { backgroundColor: PHASE_COLORS[mod.label] + '22' }]}>
+            <Text style={[s.progressionPillText, { color: PHASE_COLORS[mod.label] }]}>{mod.label}</Text>
+          </View>
+        </View>
+        <Text style={s.progressionPhase}>{mod.phase}</Text>
+      </View>
+
       <SectionLabel text="Main Workout" icon="barbell-outline" color={workout.color} />
-      {workout.exercises?.map(ex => (
-        <ExerciseCard
-          key={ex.id}
-          exercise={ex}
-          expanded={expandedId === ex.id}
-          onToggle={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
-          accentColor={workout.color}
-          onInfo={() => onInfo(ex)}
-          isToday
-          setData={getSetData(ex)}
-          onSetDataChange={(newSets) => handleSetDataChange(ex.id, newSets)}
-        />
-      ))}
+      {workout.exercises?.map(ex => {
+        const progressedEx = applyProgression(ex, mod);
+        return (
+          <ExerciseCard
+            key={ex.id}
+            exercise={progressedEx}
+            expanded={expandedId === ex.id}
+            onToggle={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
+            accentColor={workout.color}
+            onInfo={() => onInfo(ex)}
+            isToday
+            setData={getSetData(progressedEx)}
+            onSetDataChange={(newSets) => handleSetDataChange(ex.id, newSets)}
+            isDeload={mod.isDeload}
+          />
+        );
+      })}
 
       {workout.postureCooldown?.length > 0 && (
         <PostureBlock
@@ -247,7 +294,7 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload }) {
   return (
     <TouchableOpacity style={s.exCard} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
@@ -279,7 +326,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
               <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
             </View>
           )}
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} />}
+          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} />}
         </View>
       )}
     </TouchableOpacity>
@@ -510,22 +557,38 @@ const FEEL_OPTIONS = [
   { key: 'hard', color: colors.secondary, label: 'Hard' },
 ];
 
-function getSuggestion(setLogs, exerciseId, setIdx, today) {
+function parseRepRange(reps) {
+  const matches = String(reps || '').match(/\d+/g)?.map(Number) || [];
+  if (!matches.length) return { min: 0, max: Infinity };
+  return { min: matches[0], max: matches[1] || matches[0] };
+}
+
+function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload) {
   const relevant = setLogs
-    .filter(l => l.exerciseId === exerciseId && l.setNumber === setIdx + 1 && l.date !== today)
+    .filter(l => l.exerciseId === exercise.id && l.setNumber === setIdx + 1 && l.date !== today)
     .sort((a, b) => b.date.localeCompare(a.date));
   if (!relevant.length) return null;
+
   const last = relevant[0];
+  if (isDeload) return Math.round(last.weight * 0.6 * 2) / 2;
+
+  const { min, max } = parseRepRange(exercise.reps);
+  const step = exercise.equipment === 'Bodyweight' ? 0 : 2.5;
   let weight = last.weight;
-  if (last.feedback === 'easy') weight = Math.round((weight + 2.5) * 2) / 2;
-  else if (last.feedback === 'hard') weight = Math.max(0, Math.round((weight - 2.5) * 2) / 2);
+
+  if (step > 0 && (last.feedback === 'easy' || last.reps >= max)) {
+    weight = Math.round((last.weight + step) * 2) / 2;
+  } else if (step > 0 && (last.feedback === 'hard' || last.reps < min)) {
+    weight = Math.max(0, Math.round((last.weight - step) * 2) / 2);
+  }
+
   return weight;
 }
 
-function SetLogger({ exercise, accentColor, sets, onSetsChange }) {
+function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
 
   function setField(idx, field, value) {
     onSetsChange(sets.map((s, i) => i === idx ? { ...s, [field]: value } : s));
@@ -535,7 +598,8 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange }) {
     const set = sets[idx];
     const w = parseFloat(set.weight);
     const r = parseInt(set.reps, 10);
-    if (isNaN(w) || w <= 0 || isNaN(r) || r <= 0) {
+    const isBodyweight = exercise.equipment === 'Bodyweight';
+    if (isNaN(w) || (!isBodyweight && w <= 0) || w < 0 || isNaN(r) || r <= 0) {
       Alert.alert('Missing info', 'Enter weight and reps to log this set.');
       return;
     }
@@ -568,7 +632,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange }) {
       </View>
 
       {sets.map((set, idx) => {
-        const suggestion = getSuggestion(setLogs, exercise.id, idx, today);
+        const suggestion = getProgressionSuggestion(setLogs, exercise, idx, today, isDeload);
         return (
           <View key={idx} style={[sl.row, set.saved && sl.rowSaved]}>
             {/* Set number */}
@@ -737,6 +801,17 @@ const s = StyleSheet.create({
     borderLeftWidth: 3, borderLeftColor: colors.accentLight,
   },
   postureNoteText: { fontSize: 12, color: colors.accentLight, lineHeight: 18 },
+
+  progressionBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.card, borderRadius: 12, padding: 12,
+    marginBottom: 12, borderWidth: 1,
+  },
+  progressionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  progressionWeek: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
+  progressionPill: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  progressionPillText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  progressionPhase: { fontSize: 11, color: colors.textMuted, flexShrink: 1, textAlign: 'right', maxWidth: '55%' },
 
   completeBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

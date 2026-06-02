@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { daysBetweenLocalDateKeys, fromLocalDateKey, getLocalWeekDateKey, toLocalDateKey } from '../utils/date';
 
 const DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DAYS_SHORT = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -37,7 +38,7 @@ function getThisWeekCompleted(completedWorkouts) {
   monday.setDate(today.getDate() - getTodayIndex());
   monday.setHours(0, 0, 0, 0);
   return completedWorkouts
-    .filter(w => new Date(w.date) >= monday)
+    .filter(w => fromLocalDateKey(w.date) >= monday)
     .map(w => w.date);
 }
 
@@ -50,12 +51,12 @@ export default function HomeScreen({ navigation }) {
   const currentWeight = progress.weight[progress.weight.length - 1]?.value ?? userProfile.weight;
   const totalWorkouts = progress.completedWorkouts.length;
   const thisWeekDone = getThisWeekCompleted(progress.completedWorkouts);
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
 
   const sortedWorkouts = [...progress.completedWorkouts].sort((a, b) => b.date.localeCompare(a.date));
   const lastWorkout = sortedWorkouts[0];
   const daysSinceLast = lastWorkout
-    ? Math.round((Date.now() - new Date(lastWorkout.date).getTime()) / 86400000)
+    ? daysBetweenLocalDateKeys(lastWorkout.date, today)
     : null;
 
   return (
@@ -152,11 +153,7 @@ export default function HomeScreen({ navigation }) {
               {DAYS_FULL.map((day, i) => {
                 const workoutId = generatedPlan.schedule?.[day];
                 const isToday = i === todayIdx;
-                const dateStr = (() => {
-                  const d = new Date();
-                  d.setDate(d.getDate() - todayIdx + i);
-                  return d.toISOString().split('T')[0];
-                })();
+                const dateStr = getLocalWeekDateKey(i);
                 const isDone = thisWeekDone.includes(dateStr);
                 const hasWorkout = !!workoutId;
                 const workoutColor = workoutId ? generatedPlan.workouts?.[workoutId]?.color : null;

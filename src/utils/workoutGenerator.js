@@ -225,11 +225,13 @@ export function generateWorkoutPlan(userProfile) {
   } = userProfile;
 
   const primaryGoal = goals[0] || 'general_fitness';
+  const requestedDays = Math.max(1, Math.min(6, workoutDaysPerWeek));
 
   // Training days = all days minus chosen rest days, capped at workoutDaysPerWeek
+  const availableTrainingDays = ALL_DAYS.filter(d => !restDays.includes(d));
   const trainingDays = ALL_DAYS
     .filter(d => !restDays.includes(d))
-    .slice(0, workoutDaysPerWeek);
+    .slice(0, requestedDays);
 
   const typeSequence = getWorkoutTypeSequence(trainingDays.length);
 
@@ -247,5 +249,15 @@ export function generateWorkoutPlan(userProfile) {
     workouts[type] = buildWorkout(type, equipment, fitnessLevel, primaryGoal, jobType);
   });
 
-  return { schedule, workouts, generatedAt: Date.now() };
+  return {
+    schedule,
+    workouts,
+    generatedAt: Date.now(),
+    requestedDays,
+    actualTrainingDays: trainingDays.length,
+    restDays,
+    warnings: availableTrainingDays.length < requestedDays
+      ? [`Only ${availableTrainingDays.length} training days are available after selected rest days.`]
+      : [],
+  };
 }

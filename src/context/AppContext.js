@@ -42,6 +42,14 @@ function reducer(state, action) {
       return { ...state, apiKey: action.payload };
     case 'UPDATE_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
+    case 'UPDATE_PROFILE_AND_PLAN': {
+      const userProfile = { ...state.userProfile, ...action.payload };
+      return {
+        ...state,
+        userProfile,
+        generatedPlan: generateWorkoutPlan(userProfile),
+      };
+    }
     case 'COMPLETE_ONBOARDING':
       return {
         ...state,
@@ -50,25 +58,36 @@ function reducer(state, action) {
         isOnboarded: true,
       };
     case 'REGENERATE_PLAN': {
-      const plan = generateWorkoutPlan(state.userProfile);
-      return { ...state, generatedPlan: plan };
+      const userProfile = action.payload || state.userProfile;
+      const plan = generateWorkoutPlan(userProfile);
+      return { ...state, userProfile, generatedPlan: plan };
     }
     case 'LOG_WEIGHT':
       return {
         ...state,
-        progress: { ...state.progress, weight: [...state.progress.weight, action.payload] },
+        progress: {
+          ...state.progress,
+          weight: upsertByKey(state.progress.weight, action.payload, item => item.date),
+        },
       };
     case 'LOG_WAIST':
       return {
         ...state,
-        progress: { ...state.progress, waist: [...state.progress.waist, action.payload] },
+        progress: {
+          ...state.progress,
+          waist: upsertByKey(state.progress.waist, action.payload, item => item.date),
+        },
       };
     case 'LOG_WORKOUT':
       return {
         ...state,
         progress: {
           ...state.progress,
-          completedWorkouts: [...state.progress.completedWorkouts, action.payload],
+          completedWorkouts: upsertByKey(
+            state.progress.completedWorkouts,
+            action.payload,
+            item => item.date,
+          ),
         },
       };
     case 'LOG_SET':
@@ -76,7 +95,11 @@ function reducer(state, action) {
         ...state,
         progress: {
           ...state.progress,
-          setLogs: [...(state.progress.setLogs || []), action.payload],
+          setLogs: upsertByKey(
+            state.progress.setLogs || [],
+            action.payload,
+            item => `${item.date}:${item.exerciseId}:${item.setNumber}`,
+          ),
         },
       };
     case 'SET_REMINDER':
@@ -88,6 +111,15 @@ function reducer(state, action) {
     default:
       return state;
   }
+}
+
+function upsertByKey(items = [], nextItem, getKey) {
+  const nextKey = getKey(nextItem);
+  const existingIndex = items.findIndex(item => getKey(item) === nextKey);
+  const nextItems = existingIndex >= 0
+    ? items.map((item, index) => (index === existingIndex ? nextItem : item))
+    : [...items, nextItem];
+  return nextItems.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 }
 
 export function AppProvider({ children }) {

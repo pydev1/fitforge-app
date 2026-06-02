@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { streamChatMessage } from '../services/anthropicService';
 import { colors } from '../theme/colors';
+import { daysBetweenLocalDateKeys, toLocalDateKey } from '../utils/date';
 
 const QUICK_PROMPTS = [
   "What's my workout today?",
@@ -31,11 +32,11 @@ function buildWelcomeMessage(profile, progress) {
     return "Hey! I'm your personal fitness coach.\n\nTell me about yourself and I'll put together a plan that actually fits your life. What are you working towards?";
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
   const sorted = [...(progress?.completedWorkouts || [])].sort((a, b) => b.date.localeCompare(a.date));
   const lastWorkout = sorted[0];
   const daysSinceLast = lastWorkout
-    ? Math.round((Date.now() - new Date(lastWorkout.date).getTime()) / 86400000)
+    ? daysBetweenLocalDateKeys(lastWorkout.date, today)
     : null;
   const todayLogged = sorted.some(w => w.date === today);
 
