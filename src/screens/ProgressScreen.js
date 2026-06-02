@@ -222,7 +222,12 @@ export default function ProgressScreen() {
               withOuterLines={false}
             />
           ) : (
-            <EmptyChart message="Log 2+ weight entries to see your chart" />
+            <EmptyChart
+              icon="scale-outline"
+              message={progress.weight.length === 0 ? "No weight logged yet" : "Log one more entry to see your trend"}
+              actionLabel={progress.weight.length === 0 ? "Log first weight" : undefined}
+              onAction={progress.weight.length === 0 ? () => setLogModal(true) : undefined}
+            />
           )}
         </View>
 
@@ -253,7 +258,12 @@ export default function ProgressScreen() {
               withOuterLines={false}
             />
           ) : (
-            <EmptyChart message="Log 2+ waist entries to see your chart" />
+            <EmptyChart
+              icon="body-outline"
+              message={progress.waist.length === 0 ? "No waist logged yet" : "Log one more entry to see your trend"}
+              actionLabel={progress.waist.length === 0 ? "Log first measurement" : undefined}
+              onAction={progress.waist.length === 0 ? () => setLogModal(true) : undefined}
+            />
           )}
         </View>
 
@@ -332,7 +342,7 @@ function StrengthProgress({ setLogs }) {
     return (
       <View style={s.chartCard}>
         <Text style={s.chartTitle}>Strength Progress</Text>
-        <EmptyChart message="Log sets during workouts to track your strength gains" />
+        <EmptyChart icon="barbell-outline" message="Complete workouts and log sets to track your strength gains" />
       </View>
     );
   }
@@ -351,25 +361,61 @@ function StrengthProgress({ setLogs }) {
 
   return (
     <View style={s.chartCard}>
-      <Text style={s.chartTitle}>Strength Progress</Text>
+      <View style={s.chartHeader}>
+        <Text style={s.chartTitle}>Strength Progress</Text>
+        <Text style={s.chartCurrent}>{exercises.length} exercises</Text>
+      </View>
       {exercises.map(([exId, { name, logs }], i) => {
         const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
-        const firstWeight = sorted[0].weight;
-        const lastWeight = sorted[sorted.length - 1].weight;
         const best = Math.max(...logs.map(l => l.weight));
-        const delta = lastWeight - firstWeight;
+        const firstW = sorted[0].weight;
+
+        const sessions = [...new Set(sorted.map(l => l.date))].sort();
+        const lastSessionLogs = sorted.filter(l => l.date === sessions[sessions.length - 1]);
+        const prevSessionLogs = sessions.length > 1 ? sorted.filter(l => l.date === sessions[sessions.length - 2]) : [];
+        const lastBest = Math.max(...lastSessionLogs.map(l => l.weight));
+        const prevBest = prevSessionLogs.length ? Math.max(...prevSessionLogs.map(l => l.weight)) : null;
+
+        const trend = prevBest !== null ? Math.round((lastBest - prevBest) * 10) / 10 : 0;
+        const isPR = sessions.length > 1 && lastBest >= best;
+        const barPct = best > firstW ? Math.round(((lastBest - firstW) / (best - firstW)) * 100) : 100;
+        const isBodyweight = best === 0;
         const isLast = i === exercises.length - 1;
+
         return (
           <View key={exId} style={[sp.row, isLast && { borderBottomWidth: 0 }]}>
-            <View style={{ flex: 1 }}>
+            <View style={sp.rowHeader}>
               <Text style={sp.name} numberOfLines={1}>{name}</Text>
-              <Text style={sp.meta}>{logs.length} sets · Best {best} kg · Last {lastWeight} kg</Text>
+              <View style={sp.badges}>
+                {isPR && (
+                  <View style={sp.prBadge}>
+                    <Text style={sp.prText}>PR</Text>
+                  </View>
+                )}
+                {trend !== 0 && (
+                  <View style={[sp.trendBadge, { backgroundColor: trend > 0 ? colors.success + '22' : colors.secondary + '22' }]}>
+                    <Ionicons name={trend > 0 ? 'trending-up' : 'trending-down'} size={11} color={trend > 0 ? colors.success : colors.secondary} />
+                    <Text style={[sp.trendText, { color: trend > 0 ? colors.success : colors.secondary }]}>
+                      {trend > 0 ? '+' : ''}{trend}kg
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
-            {delta !== 0 && (
-              <View style={[sp.deltaBadge, { backgroundColor: delta > 0 ? colors.success + '20' : colors.secondary + '20' }]}>
-                <Text style={[sp.deltaText, { color: delta > 0 ? colors.success : colors.secondary }]}>
-                  {delta > 0 ? '+' : ''}{delta} kg
-                </Text>
+
+            <Text style={sp.meta}>
+              {logs.length} sets · Best: {isBodyweight ? 'bodyweight' : `${best}kg`} · Last: {isBodyweight ? 'bodyweight' : `${lastBest}kg`}
+            </Text>
+
+            {!isBodyweight && best > 0 && (
+              <View style={sp.barWrap}>
+                <View style={sp.barBg}>
+                  <View style={[sp.barFill, { width: `${Math.max(4, Math.min(100, barPct))}%` }]} />
+                </View>
+                <View style={sp.barLabels}>
+                  <Text style={sp.barLabel}>Start {firstW}kg</Text>
+                  <Text style={sp.barLabel}>Best {best}kg</Text>
+                </View>
               </View>
             )}
           </View>
@@ -389,11 +435,28 @@ function SummaryCard({ icon, iconColor, label, value, unit }) {
   );
 }
 
-function EmptyChart({ message }) {
+function EmptyChart({ icon = 'analytics-outline', message, actionLabel, onAction }) {
   return (
     <View style={s.emptyChart}>
-      <Ionicons name="analytics-outline" size={32} color={colors.textMuted} />
-      <Text style={s.emptyChartText}>{message}</Text>
+      <View style={s.ghostGrid} pointerEvents="none">
+        {[0.18, 0.12, 0.07].map((op, i) => (
+          <View key={i} style={[s.ghostRow, { opacity: op }]}>
+            {[1,2,3,4,5].map(j => <View key={j} style={s.ghostDash} />)}
+          </View>
+        ))}
+      </View>
+      <View style={s.emptyChartOverlay}>
+        <View style={s.emptyChartIconWrap}>
+          <Ionicons name={icon} size={26} color={colors.textMuted} />
+        </View>
+        <Text style={s.emptyChartText}>{message}</Text>
+        {actionLabel && onAction && (
+          <TouchableOpacity style={s.emptyChartCta} onPress={onAction}>
+            <Text style={s.emptyChartCtaText}>{actionLabel}</Text>
+            <Ionicons name="arrow-forward-circle-outline" size={14} color={colors.accent} />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -466,12 +529,28 @@ const s = StyleSheet.create({
   chartCurrent: { fontSize: 12, color: colors.textSec },
   chart: { borderRadius: 10, marginLeft: -8 },
   emptyChart: {
-    height: 100,
-    alignItems: 'center',
+    height: 120,
     justifyContent: 'center',
-    gap: 8,
+    overflow: 'hidden',
+  },
+  ghostGrid: {
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+    justifyContent: 'space-evenly', paddingHorizontal: 8,
+  },
+  ghostRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ghostDash: { height: 1, flex: 1, backgroundColor: colors.border, marginHorizontal: 3, borderRadius: 1 },
+  emptyChartOverlay: { alignItems: 'center', gap: 6 },
+  emptyChartIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.cardAlt, alignItems: 'center', justifyContent: 'center',
   },
   emptyChartText: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  emptyChartCta: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    backgroundColor: colors.accentDim, borderRadius: 10,
+  },
+  emptyChartCtaText: { fontSize: 11, color: colors.accentLight, fontWeight: '600' },
   recentCard: {
     marginHorizontal: 20,
     marginTop: 16,
@@ -558,11 +637,22 @@ const sc = StyleSheet.create({
 
 const sp = StyleSheet.create({
   row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  name: { fontSize: 13, color: colors.text, fontWeight: '600', marginRight: 8 },
-  meta: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
-  deltaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  deltaText: { fontSize: 12, fontWeight: '700' },
+  rowHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  name: { fontSize: 13, color: colors.text, fontWeight: '600', flex: 1, marginRight: 8 },
+  badges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  prBadge: {
+    backgroundColor: colors.warning + '28', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  prText: { fontSize: 10, color: colors.warning, fontWeight: '800', letterSpacing: 0.5 },
+  trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  trendText: { fontSize: 10, fontWeight: '700' },
+  meta: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  barWrap: { marginTop: 8 },
+  barBg: { height: 4, backgroundColor: colors.cardHighest, borderRadius: 2, overflow: 'hidden' },
+  barFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
+  barLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
+  barLabel: { fontSize: 9, color: colors.textMuted },
 });

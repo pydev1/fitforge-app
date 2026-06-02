@@ -3,9 +3,9 @@ export const colors = {
   // Surface hierarchy (no blue tint — warm neutral dark)
   bg: '#141218',
   surface: '#1D1B20',
-  card: '#211F26',
-  cardAlt: '#2B2930',
-  cardHighest: '#36343B',
+  card: '#252330',
+  cardAlt: '#2F2D3A',
+  cardHighest: '#3A3844',
 
   // Outline
   border: '#49454F',
