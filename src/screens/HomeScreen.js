@@ -138,7 +138,7 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* Motivation */}
-        <LinearGradient colors={['#0F0F1A', '#1A1A2E']} style={s.quoteCard}>
+        <LinearGradient colors={[colors.surface, colors.card]} style={s.quoteCard}>
           <Ionicons name="flame" size={22} color={colors.warning} style={{ marginBottom: 10 }} />
           <Text style={s.quoteText}>"{quote.quote}"</Text>
           <Text style={s.quoteAuthor}>— {quote.author}</Text>
@@ -191,8 +191,8 @@ const s = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 4,
   },
-  greeting: { fontSize: 13, color: colors.textSec, fontWeight: '400' },
-  name: { fontSize: 26, color: colors.text, fontWeight: '700', marginTop: 2 },
+  greeting: { fontSize: 12, color: colors.textMuted, fontWeight: '500', letterSpacing: 0.3 },
+  name: { fontSize: 28, color: colors.text, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
   settingsBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.surface,
@@ -201,8 +201,14 @@ const s = StyleSheet.create({
   },
   statsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   section: {
-    fontSize: 17, color: colors.text, fontWeight: '700',
-    marginHorizontal: 20, marginTop: 20, marginBottom: 10,
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginHorizontal: 20,
+    marginTop: 28,
+    marginBottom: 12,
   },
   workoutCard: {
     marginHorizontal: 20, borderRadius: 18, padding: 20,
@@ -244,12 +250,13 @@ const s = StyleSheet.create({
 
 const sc = StyleSheet.create({
   card: {
-    flex: 1, backgroundColor: colors.card, borderRadius: 12,
-    padding: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+    flex: 1, backgroundColor: colors.card, borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border,
   },
-  value: { fontSize: 15, color: colors.text, fontWeight: '700' },
-  unit: { fontSize: 9, color: colors.textSec, fontWeight: '400' },
-  label: { fontSize: 9, color: colors.textMuted, marginTop: 2 },
+  value: { fontSize: 20, color: colors.text, fontWeight: '800', letterSpacing: -0.5 },
+  unit: { fontSize: 10, color: colors.textSec, fontWeight: '500' },
+  label: { fontSize: 10, color: colors.textMuted, marginTop: 3, letterSpacing: 0.3 },
 });
 
 const ac = StyleSheet.create({

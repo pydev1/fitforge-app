@@ -401,8 +401,8 @@ const s = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
-  title: { fontSize: 28, color: colors.text, fontWeight: '700' },
-  subtitle: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  title: { fontSize: 28, color: colors.text, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 3, letterSpacing: 0.2 },
   logBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -434,7 +434,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  chartTitle: { fontSize: 15, color: colors.text, fontWeight: '700' },
+  chartTitle: { fontSize: 11, color: colors.textMuted, fontWeight: '700', letterSpacing: 1.1, textTransform: 'uppercase' },
   chartCurrent: { fontSize: 12, color: colors.textSec },
   chart: { borderRadius: 10, marginLeft: -8 },
   emptyChart: {
@@ -523,15 +523,16 @@ const sc = StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  value: { fontSize: 16, color: colors.text, fontWeight: '700' },
-  unit: { fontSize: 10, color: colors.textSec, fontWeight: '400' },
-  label: { fontSize: 9, color: colors.textMuted, marginTop: 2 },
+  value: { fontSize: 22, color: colors.text, fontWeight: '800', letterSpacing: -0.5 },
+  unit: { fontSize: 10, color: colors.textSec, fontWeight: '500' },
+  label: { fontSize: 10, color: colors.textMuted, marginTop: 3, letterSpacing: 0.3 },
 });
 
 const sp = StyleSheet.create({

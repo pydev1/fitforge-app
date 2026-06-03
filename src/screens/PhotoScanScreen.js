@@ -218,8 +218,8 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 28, color: colors.text, fontWeight: '700' },
-  subtitle: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  title: { fontSize: 28, color: colors.text, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 3, letterSpacing: 0.2 },
   infoBanner: {
     flexDirection: 'row',
     marginHorizontal: 16,
