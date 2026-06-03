@@ -1,33 +1,30 @@
-// Material 3 dark — fitness / energetic
 export const colors = {
-  // Surface hierarchy (no blue tint — warm neutral dark)
-  bg: '#141218',
-  surface: '#1D1B20',
-  card: '#252330',
-  cardAlt: '#2F2D3A',
-  cardHighest: '#3A3844',
+  // Warm dark — not cold developer-terminal black
+  bg: '#0E0C09',
+  surface: '#181410',
+  card: '#211C14',
+  cardAlt: '#1C1810',
+  cardHighest: '#2A2218',
+  border: '#302618',
 
-  // Outline
-  border: '#49454F',
-
-  // Primary — vibrant fitness orange
-  accent: '#FF6B35',
-  accentLight: '#FF8A5B',
-  accentDim: '#4A1800',
+  // Brand: warm amber-orange — energetic, human
+  accent: '#EA580C',
+  accentLight: '#FB923C',
+  accentDim: '#431407',
 
   // Semantic
   secondary: '#F43F5E',
-  secondaryDim: '#7F1D1D',
-  success: '#6DD58C',
-  successDim: '#1B3A27',
-  warning: '#F4C430',
-  warningDim: '#3A2D00',
-  info: '#80CBFF',
-  infoDim: '#0D2B45',
+  secondaryDim: '#881337',
+  success: '#10B981',
+  successDim: '#064E3B',
+  warning: '#FBBF24',
+  warningDim: '#78350F',
+  info: '#38BDF8',
+  infoDim: '#0C4A6E',
 
-  // Text
-  text: '#E6E1E5',
-  textSec: '#CAC4D0',
-  textMuted: '#938F99',
+  // Text — warm whites, not blue-tinted grays
+  text: '#FAF8F5',
+  textSec: '#A89580',
+  textMuted: '#6B5E52',
   white: '#FFFFFF',
 };

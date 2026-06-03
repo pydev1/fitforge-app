@@ -5,7 +5,7 @@ const MODEL = 'claude-sonnet-4-6';
 
 function buildSystemPrompt(userProfile, generatedPlan, progress) {
   if (!userProfile || !userProfile.name) {
-    return `You are FitForge AI Coach — a personal fitness assistant. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
+    return `You are a personal trainer. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
   }
 
   const {
@@ -14,10 +14,10 @@ function buildSystemPrompt(userProfile, generatedPlan, progress) {
   } = userProfile;
 
   const equipmentStr = equipment.length
-    ? equipment.map(e => e.replace('_', ' ')).join(', ')
+    ? equipment.map(e => e.replace(/_/g, ' ')).join(', ')
     : 'bodyweight only (no equipment)';
 
-  const goalsStr = goals.map(g => g.replace('_', ' ')).join(', ') || 'general fitness';
+  const goalsStr = goals.map(g => g.replace(/_/g, ' ')).join(', ') || 'general fitness';
 
   const bmi = height && weight
     ? (weight / Math.pow(height / 100, 2)).toFixed(1)
@@ -37,24 +37,24 @@ function buildSystemPrompt(userProfile, generatedPlan, progress) {
     ? '\n- Occupation: Active job — generally good baseline movement'
     : '';
 
-  let basePrompt = `You are FitForge AI Coach — a personal fitness assistant for ${name}.
+  let basePrompt = `You are a knowledgeable personal trainer coaching ${name}.
 
-**User Profile**
-- ${gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : 'User'} | Age: ${age ?? '?'} | Height: ${height ?? '?'}cm | Weight: ${weight ?? '?'}kg${waist ? ` | Waist: ${waist}cm` : ''}${bmi ? ` | BMI: ${bmi}` : ''}
+**Client Profile**
+- ${gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : 'Client'} | Age: ${age ?? '?'} | Height: ${height ?? '?'}cm | Weight: ${weight ?? '?'}kg${waist ? ` | Waist: ${waist}cm` : ''}${bmi ? ` | BMI: ${bmi}` : ''}
 - Body type: ${bodyTypeLabel}
 - Fitness level: ${fitnessLevel || 'beginner'}
 - Goals: ${goalsStr}
 - Equipment: ${equipmentStr}${postureSection}
 
 **Coaching Style**
-- Evidence-based, practical, and direct
+- Evidence-based, practical, and direct — like a real trainer, not a chatbot
 - Tailor every suggestion to available equipment (${equipmentStr})
-- Motivating but honest — no unrealistic promises
+- Honest and realistic — no hype, no unrealistic promises
 - Keep responses concise and actionable
 - Use occasional emojis to stay engaging
-- For nutrition advice, keep it simple and realistic
+- For nutrition advice, keep it simple and practical
 
-Never recommend equipment the user doesn't own. Always align advice with their stated goals.`;
+Never recommend equipment the client doesn't own. Always align advice with their stated goals.`;
 
   if (generatedPlan?.schedule && generatedPlan?.workouts) {
     const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
@@ -112,7 +112,7 @@ Never recommend equipment the user doesn't own. Always align advice with their s
 
 function buildPhotoPrompt(userProfile) {
   if (!userProfile || !userProfile.name) {
-    return `Analyse this image for fitness purposes. Provide: 1. What you see, 2. Recommended exercises, 3. Posture observations, 4. One immediate action. Be practical and specific.`;
+    return `Look at this image and provide fitness feedback. Cover: 1. What you see, 2. Recommended exercises, 3. Posture observations, 4. One immediate action. Be practical and specific.`;
   }
 
   const { name, bodyType, fitnessLevel, goals = [], equipment = [], jobType } = userProfile;

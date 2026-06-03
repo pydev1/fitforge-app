@@ -304,7 +304,7 @@ export default function ProgressScreen() {
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Log Today's Stats</Text>
+              <Text style={s.modalTitle}>Update your numbers</Text>
               <TouchableOpacity onPress={() => setLogModal(false)}>
                 <Ionicons name="close" size={22} color={colors.textSec} />
               </TouchableOpacity>
@@ -328,7 +328,7 @@ export default function ProgressScreen() {
               placeholderTextColor={colors.textMuted}
             />
             <TouchableOpacity style={s.saveBtn} onPress={saveLog}>
-              <Text style={s.saveBtnText}>Save Entry</Text>
+              <Text style={s.saveBtnText}>Save</Text>
             </TouchableOpacity>
           </View>
         </View>

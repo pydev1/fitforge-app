@@ -83,7 +83,7 @@ export default function CoachScreen({ navigation }) {
 
     if (!state.apiKey) {
       Alert.alert(
-        'API Key Required',
+        'API key needed',
         'Add your Anthropic API key in Settings to chat with your coach.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -127,8 +127,8 @@ export default function CoachScreen({ navigation }) {
   }
 
   function clearChat() {
-    Alert.alert('Clear Chat', 'Start a fresh conversation?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('Start fresh?', 'This will clear the conversation history.', [
+      { text: 'Keep it', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: () => dispatch({ type: 'CLEAR_CHAT' }) },
     ]);
   }

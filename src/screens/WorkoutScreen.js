@@ -41,11 +41,11 @@ export default function WorkoutScreen({ route }) {
     const date = toLocalDateKey();
     const alreadyDone = progress.completedWorkouts.some(w => w.date === date);
     if (alreadyDone) {
-      Alert.alert('Already logged', "Today's session is already marked as complete!");
+      Alert.alert('Already done!', "You already crushed this one today. Rest up.");
       return;
     }
     dispatch({ type: 'LOG_WORKOUT', payload: { date, type: todayWorkoutId } });
-    Alert.alert('Session Complete! 💪', 'Great work — logged to your progress tracker.');
+    Alert.alert(`${todayWorkout?.name || 'Session'} done! 💪`, "Nice work. It's in the books.");
   }
 
   return (
@@ -239,7 +239,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         activeOpacity={0.8}
       >
         <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color="#fff" />
-        <Text style={s.completeBtnText}>{isDone ? 'Session Logged ✓' : 'Mark as Complete'}</Text>
+        <Text style={s.completeBtnText}>{isDone ? 'Session Done ✓' : 'Done for Today'}</Text>
       </TouchableOpacity>
     </View>
   );

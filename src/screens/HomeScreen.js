@@ -212,8 +212,8 @@ export default function HomeScreen({ navigation }) {
           />
           <ActionCard
             icon="camera"
-            title="Photo Scan"
-            subtitle="AI analysis"
+            title="Form Check"
+            subtitle="Get feedback"
             color={colors.secondary}
             bg={colors.secondaryDim}
             onPress={() => navigation.navigate('Scan')}

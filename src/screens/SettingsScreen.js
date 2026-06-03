@@ -151,7 +151,7 @@ export default function SettingsScreen({ navigation }) {
 
         {/* API Key */}
         <Section title="Anthropic API Key" icon="key-outline">
-          <Text style={s.note}>Required for AI Coach and Photo Scan. Get yours at console.anthropic.com</Text>
+          <Text style={s.note}>Required for your Coach and Form Check features. Get yours at console.anthropic.com</Text>
           <View style={s.keyRow}>
             <TextInput
               style={[s.input, { flex: 1 }]}
@@ -170,7 +170,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={s.keyStatus}>
             <Ionicons name={apiKey ? 'checkmark-circle' : 'warning-outline'} size={14} color={apiKey ? colors.success : colors.warning} />
             <Text style={[s.keyStatusText, { color: apiKey ? colors.success : colors.warning }]}>
-              {apiKey ? 'API key is set' : 'No API key — AI features disabled'}
+              {apiKey ? 'API key is set' : 'No API key — coach and form check disabled'}
             </Text>
           </View>
         </Section>

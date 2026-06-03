@@ -3,12 +3,12 @@ import { EXERCISES, POSTURE_WARMUPS, POSTURE_COOLDOWNS } from '../data/exerciseL
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const COLORS = {
-  push:  '#7C3AED',
+  push:  '#EA580C',   // brand orange
   pull:  '#3B82F6',
   legs:  '#10B981',
   full:  '#F43F5E',
-  core:  '#F59E0B',
-  upper: '#8B5CF6',
+  core:  '#FBBF24',   // amber (distinct from orange)
+  upper: '#FB923C',   // lighter orange
   lower: '#06B6D4',
 };
 

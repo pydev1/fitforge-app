@@ -27,10 +27,14 @@ const TABS = [
   { name: 'Progress', icon: 'stats-chart', iconOutline: 'stats-chart-outline' },
 ];
 
-function TabIcon({ name, iconActive, iconInactive, focused, color }) {
+function TabIcon({ iconActive, iconInactive, focused }) {
   return (
     <View style={[nav.iconWrap, focused && nav.iconWrapActive]}>
-      <Ionicons name={focused ? iconActive : iconInactive} size={22} color={color} />
+      <Ionicons
+        name={focused ? iconActive : iconInactive}
+        size={22}
+        color={focused ? colors.accentLight : colors.textMuted}
+      />
     </View>
   );
 }
@@ -43,6 +47,7 @@ function MainTabs() {
         const tab = TABS.find(t => t.name === route.name);
         return {
           headerShown: false,
+          tabBarShowLabel: false,
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopWidth: 0,
@@ -51,21 +56,16 @@ function MainTabs() {
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,
-            height: 64 + insets.bottom,
-            paddingBottom: 10 + insets.bottom,
+            height: 62 + insets.bottom,
+            paddingBottom: insets.bottom || 8,
             paddingTop: 6,
             paddingHorizontal: 4,
           },
-          tabBarActiveTintColor: colors.accent,
-          tabBarInactiveTintColor: colors.textMuted,
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 1 },
-          tabBarIcon: ({ focused, color }) => (
+          tabBarIcon: ({ focused }) => (
             <TabIcon
-              name={route.name}
               iconActive={tab.icon}
               iconInactive={tab.iconOutline}
               focused={focused}
-              color={color}
             />
           ),
         };
@@ -115,9 +115,9 @@ export default function AppNavigator() {
 
 const nav = StyleSheet.create({
   iconWrap: {
-    width: 48,
-    height: 32,
-    borderRadius: 16,
+    width: 52,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
