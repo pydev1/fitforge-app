@@ -71,10 +71,10 @@ export default function PhotoScanScreen({ navigation }) {
   async function analyse() {
     if (!state.apiKey) {
       Alert.alert(
-        'API Key Required',
-        'Add your Anthropic API key in Settings to use photo analysis.',
+        'API key needed',
+        'Add your Anthropic API key in Settings to get photo feedback.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Not now', style: 'cancel' },
           { text: 'Settings', onPress: () => navigation.navigate('Settings') },
         ],
       );
@@ -104,15 +104,15 @@ export default function PhotoScanScreen({ navigation }) {
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={s.header}>
-          <Text style={s.title}>Photo Scan</Text>
-          <Text style={s.subtitle}>AI-powered exercise analysis</Text>
+          <Text style={s.title}>Form Check</Text>
+          <Text style={s.subtitle}>Get feedback on your form and setup</Text>
         </View>
 
         {/* Info Banner */}
         <View style={s.infoBanner}>
           <Ionicons name="information-circle-outline" size={16} color={colors.info} style={{ marginRight: 8 }} />
           <Text style={s.infoText}>
-            Take or upload a photo — of yourself, your setup, your posture — and Claude will analyse it and suggest exercises tailored to you.
+            Take or upload a photo — yourself, your posture, your setup — and get exercise suggestions tailored specifically to you.
           </Text>
         </View>
 
@@ -156,7 +156,7 @@ export default function PhotoScanScreen({ navigation }) {
                 : <Ionicons name="sparkles" size={22} color={colors.white} />
               }
               <Text style={s.pickBtnText}>
-                {analyzing ? 'Analysing...' : 'Analyse with AI'}
+                {analyzing ? 'Analysing...' : 'Get Feedback'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -166,21 +166,21 @@ export default function PhotoScanScreen({ navigation }) {
         {analyzing && (
           <View style={s.loadingCard}>
             <ActivityIndicator size="large" color={colors.accentLight} />
-            <Text style={s.loadingText}>Claude is analysing your photo...</Text>
-            <Text style={s.loadingSubText}>Checking posture, equipment, and building your recommendations</Text>
+            <Text style={s.loadingText}>Analysing your photo...</Text>
+            <Text style={s.loadingSubText}>Looking at your posture, equipment, and tailoring suggestions to you</Text>
           </View>
         )}
 
         {result && (
           <View style={s.resultCard}>
             <View style={s.resultHeader}>
-              <Ionicons name="sparkles" size={18} color={colors.accentLight} />
-              <Text style={s.resultTitle}>AI Analysis</Text>
+              <Ionicons name="checkmark-circle" size={18} color={colors.accentLight} />
+              <Text style={s.resultTitle}>Your Feedback</Text>
             </View>
             <Text style={s.resultText}>{result}</Text>
             <TouchableOpacity style={s.newScanBtn} onPress={reset}>
               <Ionicons name="refresh" size={16} color={colors.accentLight} />
-              <Text style={s.newScanBtnText}>New Scan</Text>
+              <Text style={s.newScanBtnText}>Try Another</Text>
             </TouchableOpacity>
           </View>
         )}

@@ -19,24 +19,24 @@ import { colors } from '../theme/colors';
 
 const QUICK_PROMPTS = [
   "What should I eat today?",
-  "Modify today's workout",
-  "I'm feeling tired/sore",
-  "How to lose belly fat?",
-  "Fix my posture fast",
-  "Progressive overload tips",
+  "Can we adjust today's workout?",
+  "My body is feeling sore",
+  "How do I lose belly fat?",
+  "Quick posture fix",
+  "When should I increase weights?",
 ];
 
 function buildWelcomeMessage(profile) {
   if (!profile?.name) {
-    return "Hey! I'm your FitForge AI Coach 💪\n\nI'm here to give you personalised fitness advice. What can I help with today?";
+    return "Hey! Ready to get after it?\n\nTell me what's on your mind — training, nutrition, recovery. I'll give you something practical you can act on today.";
   }
   const goalStr = profile.goals?.length
-    ? profile.goals[0].replace('_', ' ')
+    ? profile.goals[0].replace(/_/g, ' ')
     : 'general fitness';
   const equipStr = profile.equipment?.length
-    ? profile.equipment.map(e => e.replace('_', ' ')).join(', ')
+    ? profile.equipment.map(e => e.replace(/_/g, ' ')).join(', ')
     : 'bodyweight training';
-  return `Hey ${profile.name}! I'm your FitForge AI Coach 💪\n\nI know your full profile — ${profile.height ?? '?'}cm, ${profile.weight ?? '?'}kg, ${profile.fitnessLevel ?? 'beginner'} level. Your primary goal is ${goalStr} using ${equipStr}.\n\nEvery answer I give is tailored specifically to you. What can I help with today?`;
+  return `Hey ${profile.name}! Good to see you.\n\nYour goal is ${goalStr} and you've got ${equipStr} to work with. I've got your full profile — just ask me anything and I'll tailor it to you.\n\nWhat's on your mind?`;
 }
 
 export default function CoachScreen({ navigation }) {
@@ -66,10 +66,10 @@ export default function CoachScreen({ navigation }) {
 
     if (!state.apiKey) {
       Alert.alert(
-        'API Key Required',
-        'Add your Anthropic API key in Settings to use the AI Coach.',
+        'API key needed',
+        'Add your Anthropic API key in Settings to chat with your coach.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Not now', style: 'cancel' },
           { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
         ],
       );
@@ -94,8 +94,8 @@ export default function CoachScreen({ navigation }) {
   }
 
   function clearChat() {
-    Alert.alert('Clear Chat', 'Start a fresh conversation?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('Start fresh?', 'This will clear the conversation history.', [
+      { text: 'Keep it', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: () => dispatch({ type: 'CLEAR_CHAT' }) },
     ]);
   }
@@ -107,11 +107,11 @@ export default function CoachScreen({ navigation }) {
         <View style={s.header}>
           <View style={s.headerLeft}>
             <View style={s.avatar}>
-              <Ionicons name="sparkles" size={18} color={colors.white} />
+              <Ionicons name="barbell-outline" size={18} color={colors.white} />
             </View>
             <View>
-              <Text style={s.headerTitle}>AI Coach</Text>
-              <Text style={s.headerSub}>Powered by Claude · Personalised for you</Text>
+              <Text style={s.headerTitle}>Your Coach</Text>
+              <Text style={s.headerSub}>Knows your full profile · always in your corner</Text>
             </View>
           </View>
           <TouchableOpacity onPress={clearChat} style={s.clearBtn}>
@@ -152,7 +152,7 @@ export default function CoachScreen({ navigation }) {
             style={s.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask your coach anything..."
+            placeholder="Message your coach..."
             placeholderTextColor={colors.textMuted}
             multiline
             maxLength={500}
@@ -180,7 +180,7 @@ function Bubble({ message }) {
     <View style={[s.bubbleWrap, isUser ? s.bubbleWrapUser : s.bubbleWrapAI]}>
       {!isUser && (
         <View style={s.aiBubbleAvatar}>
-          <Ionicons name="sparkles" size={12} color={colors.white} />
+          <Ionicons name="barbell-outline" size={12} color={colors.white} />
         </View>
       )}
       <View style={[s.bubble, isUser ? s.bubbleUser : s.bubbleAI]}>
@@ -196,7 +196,7 @@ function TypingIndicator() {
   return (
     <View style={[s.bubbleWrap, s.bubbleWrapAI]}>
       <View style={s.aiBubbleAvatar}>
-        <Ionicons name="sparkles" size={12} color={colors.white} />
+        <Ionicons name="barbell-outline" size={12} color={colors.white} />
       </View>
       <View style={[s.bubble, s.bubbleAI, s.typingBubble]}>
         <View style={s.dots}>

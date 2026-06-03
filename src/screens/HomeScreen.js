@@ -106,8 +106,8 @@ export default function HomeScreen({ navigation }) {
         {/* Quick Actions */}
         <Text style={s.section}>Quick Actions</Text>
         <View style={s.actionsRow}>
-          <Action icon="chatbubble-ellipses" label="AI Coach" color={colors.accent} onPress={() => navigation.navigate('Coach')} />
-          <Action icon="camera" label="Photo Scan" color={colors.secondary} onPress={() => navigation.navigate('Scan')} />
+          <Action icon="chatbubble-ellipses" label="Coach" color={colors.accent} onPress={() => navigation.navigate('Coach')} />
+          <Action icon="camera" label="Form Check" color={colors.secondary} onPress={() => navigation.navigate('Scan')} />
           <Action icon="stats-chart" label="Progress" color={colors.success} onPress={() => navigation.navigate('Progress')} />
           <Action icon="body" label="Posture Fix" color={colors.warning} onPress={() => navigation.navigate('Workout', { tab: 'posture' })} />
         </View>
@@ -132,7 +132,7 @@ export default function HomeScreen({ navigation }) {
           <View style={s.planChip}>
             <Ionicons name="checkmark-circle" size={14} color={colors.success} style={{ marginRight: 6 }} />
             <Text style={s.planChipText}>
-              {Object.values(generatedPlan.schedule).filter(Boolean).length}-day personalised plan active
+              {Object.values(generatedPlan.schedule).filter(Boolean).length}-day plan · active
             </Text>
           </View>
         )}

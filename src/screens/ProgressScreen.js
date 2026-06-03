@@ -128,7 +128,7 @@ export default function ProgressScreen() {
         <View style={s.header}>
           <View>
             <Text style={s.title}>Progress</Text>
-            <Text style={s.subtitle}>Track your transformation</Text>
+            <Text style={s.subtitle}>{userProfile.name ? `${userProfile.name}'s journey` : 'Your journey'}</Text>
           </View>
           <TouchableOpacity style={s.logBtn} onPress={() => setLogModal(true)}>
             <Ionicons name="add" size={20} color={colors.white} />
@@ -234,7 +234,7 @@ export default function ProgressScreen() {
         <View style={s.recentCard}>
           <Text style={s.chartTitle}>Recent Sessions</Text>
           {progress.completedWorkouts.length === 0 ? (
-            <Text style={s.emptyText}>No sessions logged yet. Complete a workout to see it here.</Text>
+            <Text style={s.emptyText}>Your sessions will show up here once you complete your first workout.</Text>
           ) : (
             [...progress.completedWorkouts]
               .sort((a, b) => b.date.localeCompare(a.date))
@@ -252,11 +252,15 @@ export default function ProgressScreen() {
         {/* Goal Reminder */}
         <View style={s.goalCard}>
           <Ionicons name="trophy-outline" size={20} color={colors.warning} style={{ marginBottom: 8 }} />
-          <Text style={s.goalTitle}>Your Goal</Text>
+          <Text style={s.goalTitle}>{userProfile.name ? `${userProfile.name}'s goal` : 'Your goal'}</Text>
           <Text style={s.goalText}>
-            Body recomposition: lose belly fat while gaining lean muscle.{'\n'}
-            Starting waist: {firstWaist?.value ?? userProfile.waist}cm → Target: under 80cm.{'\n'}
-            Stay consistent — recomp takes 3–6 months to show clearly.
+            {userProfile.goals?.length
+              ? userProfile.goals.map(g => g.replace(/_/g, ' ')).join(' · ')
+              : 'general fitness'}
+            {(firstWaist?.value || userProfile.waist) && lastWaist
+              ? `\nWaist: ${firstWaist?.value ?? userProfile.waist}cm → ${lastWaist.value}cm now`
+              : ''}
+            {'\n'}Results compound over months — stay consistent.
           </Text>
         </View>
 
@@ -268,7 +272,7 @@ export default function ProgressScreen() {
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Log Today's Stats</Text>
+              <Text style={s.modalTitle}>Update your numbers</Text>
               <TouchableOpacity onPress={() => setLogModal(false)}>
                 <Ionicons name="close" size={22} color={colors.textSec} />
               </TouchableOpacity>
@@ -292,7 +296,7 @@ export default function ProgressScreen() {
               placeholderTextColor={colors.textMuted}
             />
             <TouchableOpacity style={s.saveBtn} onPress={saveLog}>
-              <Text style={s.saveBtnText}>Save Entry</Text>
+              <Text style={s.saveBtnText}>Save</Text>
             </TouchableOpacity>
           </View>
         </View>
