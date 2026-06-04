@@ -8,8 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 
-const TABS = ['Today', 'Weekly', 'Posture Guide'];
+const TABS = ['Today', 'This week', 'Posture'];
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function getTodayKey() {
@@ -17,7 +18,6 @@ function getTodayKey() {
   return DAYS_ORDER[d === 0 ? 6 : d - 1];
 }
 
-// Round to nearest 0.5 (dumbbell increments)
 function roundWeight(w) {
   return Math.round(w * 2) / 2;
 }
@@ -25,7 +25,7 @@ function roundWeight(w) {
 function suggestWeight(weight, feedback) {
   const w = parseFloat(weight);
   if (!w || !feedback || feedback === 'good') return weight;
-  const factor = feedback === 'easy' ? 1.075 : 0.925; // +7.5% or -7.5%
+  const factor = feedback === 'easy' ? 1.075 : 0.925;
   const suggested = roundWeight(w * factor);
   return suggested > 0 ? String(suggested) : weight;
 }
@@ -44,6 +44,25 @@ function getFeedbackIcon(feedback) {
   return 'ellipse-outline';
 }
 
+// Get best weight for an exercise across all set logs
+function getExercisePR(setLogs, exerciseId) {
+  const logs = setLogs.filter(l => l.exerciseId === exerciseId && l.weight);
+  if (!logs.length) return null;
+  return Math.max(...logs.map(l => l.weight));
+}
+
+// Get last 5 session weights for sparkline
+function getSparklineData(setLogs, exerciseId) {
+  const byDate = {};
+  setLogs.filter(l => l.exerciseId === exerciseId && l.weight).forEach(l => {
+    if (!byDate[l.date] || l.weight > byDate[l.date]) {
+      byDate[l.date] = l.weight;
+    }
+  });
+  const sorted = Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).slice(-5);
+  return sorted.map(([, v]) => v);
+}
+
 export default function WorkoutScreen({ route }) {
   const { state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState(0);
@@ -59,8 +78,8 @@ export default function WorkoutScreen({ route }) {
   const todayKey = getTodayKey();
   const todayWorkoutId = generatedPlan?.schedule?.[todayKey] ?? null;
   const todayWorkout = todayWorkoutId ? generatedPlan?.workouts?.[todayWorkoutId] : null;
+  const setLogs = progress.setLogs || [];
 
-  // Initialise set tracking from previous session of same workout type
   useEffect(() => {
     if (!todayWorkout?.exercises) return;
     const prevSession = [...(progress.completedWorkouts || [])]
@@ -70,12 +89,8 @@ export default function WorkoutScreen({ route }) {
     const initial = {};
     todayWorkout.exercises.forEach(ex => {
       const prevEx = prevSession?.exercises?.find(e => e.id === ex.id);
-      // Use last set's weight from previous session as starting suggestion
-      const prevSets = prevEx?.sets || [];
-      const prevWeights = prevSets.map(s => s.weight).filter(Boolean);
-      const lastWeight = prevWeights.length
-        ? String(prevWeights[prevWeights.length - 1])
-        : '';
+      const prevWeights = (prevEx?.sets || []).map(s => s.weight).filter(Boolean);
+      const lastWeight = prevWeights.length ? String(prevWeights[prevWeights.length - 1]) : '';
       initial[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
         weight: i === 0 ? lastWeight : '',
         feedback: null,
@@ -90,17 +105,10 @@ export default function WorkoutScreen({ route }) {
     setSessionSets(prev => {
       const sets = [...(prev[exerciseId] || [])];
       sets[setIdx] = { ...sets[setIdx], [field]: value };
-
-      // When feedback is given, auto-suggest next set weight
       if (field === 'feedback' && setIdx + 1 < sets.length) {
-        const currentWeight = sets[setIdx].weight;
-        const nextWeight = suggestWeight(currentWeight, value);
+        const nextWeight = suggestWeight(sets[setIdx].weight, value);
         if (nextWeight !== sets[setIdx + 1].weight) {
-          sets[setIdx + 1] = {
-            ...sets[setIdx + 1],
-            weight: nextWeight,
-            suggested: true,
-          };
+          sets[setIdx + 1] = { ...sets[setIdx + 1], weight: nextWeight, suggested: true };
         }
       }
       return { ...prev, [exerciseId]: sets };
@@ -132,29 +140,26 @@ export default function WorkoutScreen({ route }) {
       return;
     }
     const exerciseLogs = (todayWorkout?.exercises || []).map(ex => ({
-      id: ex.id,
-      name: ex.name,
+      id: ex.id, name: ex.name,
       sets: (sessionSets[ex.id] || []).map((s, i) => ({
-        setNum: i + 1,
-        weight: parseFloat(s.weight) || null,
-        feedback: s.feedback,
-        completed: s.completed,
+        setNum: i + 1, weight: parseFloat(s.weight) || null,
+        feedback: s.feedback, completed: s.completed,
       })),
     }));
-    dispatch({
-      type: 'LOG_WORKOUT',
-      payload: { date, type: todayWorkoutId, exercises: exerciseLogs },
-    });
-    Alert.alert('Session Complete! 💪', 'Great work — logged to your progress tracker.');
+    dispatch({ type: 'LOG_WORKOUT', payload: { date, type: todayWorkoutId, exercises: exerciseLogs } });
+    Alert.alert('Session complete! 💪', 'Great work — logged to your progress tracker.');
   }
+
+  // Get subtitle based on today's workout
+  const subtitle = todayWorkout
+    ? `${todayWorkout.name} today — ${todayWorkout.focus}`
+    : totalDays > 0 ? `${totalDays}-day split · personalised for ${userProfile.name || 'you'}` : 'No plan yet';
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <Text style={s.title}>Workouts</Text>
-        <Text style={s.subtitle}>
-          {totalDays > 0 ? `${totalDays}-day split` : 'No plan yet'} · personalised for {userProfile.name || 'you'}
-        </Text>
+        <Text style={s.title}>Your workouts</Text>
+        <Text style={s.subtitle}>{subtitle}</Text>
       </View>
 
       <View style={s.tabBar}>
@@ -169,10 +174,7 @@ export default function WorkoutScreen({ route }) {
         ))}
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {activeTab === 0 && (
             <TodayTab
@@ -186,13 +188,11 @@ export default function WorkoutScreen({ route }) {
               sessionSets={sessionSets}
               onSetUpdate={handleSetUpdate}
               getPrevRef={getPrevSessionRef}
+              setLogs={setLogs}
             />
           )}
           {activeTab === 1 && (
-            <WeeklyTab
-              generatedPlan={generatedPlan}
-              completedWorkouts={progress.completedWorkouts}
-            />
+            <WeeklyTab generatedPlan={generatedPlan} completedWorkouts={progress.completedWorkouts} />
           )}
           {activeTab === 2 && (
             <PostureGuideTab expandedId={expandedId} setExpandedId={setExpandedId} />
@@ -211,7 +211,7 @@ export default function WorkoutScreen({ route }) {
 function TodayTab({
   workout, dayName, expandedId, setExpandedId,
   onComplete, completedWorkouts, onInfo,
-  sessionSets, onSetUpdate, getPrevRef,
+  sessionSets, onSetUpdate, getPrevRef, setLogs,
 }) {
   const today = new Date().toISOString().split('T')[0];
   const isDone = completedWorkouts.some(w => w.date === today);
@@ -220,12 +220,12 @@ function TodayTab({
     return (
       <View style={s.restContainer}>
         <Text style={{ fontSize: 48 }}>😴</Text>
-        <Text style={s.restTitle}>Rest Day</Text>
-        <Text style={s.restSubtitle}>{dayName} · Muscle growth happens during recovery</Text>
+        <Text style={s.restTitle}>Rest day</Text>
+        <Text style={s.restSubtitle}>{dayName} · muscle growth happens during recovery</Text>
         <View style={s.restTip}>
           <Ionicons name="information-circle-outline" size={16} color={colors.info} style={{ marginRight: 8 }} />
           <Text style={s.restTipText}>
-            Use today for a 10-min walk, light stretching, or the Posture Guide routine.
+            Use today for a 10-min walk, light stretching, or the Posture routine.
           </Text>
         </View>
       </View>
@@ -236,10 +236,10 @@ function TodayTab({
   const completedSets = Object.values(sessionSets).reduce(
     (a, sets) => a + sets.filter(s => s.completed).length, 0
   );
-  const progress = totalSets > 0 ? completedSets / totalSets : 0;
+  const prog = totalSets > 0 ? completedSets / totalSets : 0;
 
   return (
-    <View style={{ paddingHorizontal: 16 }}>
+    <View style={{ paddingHorizontal: 20 }}>
       <View style={[s.workoutHeader, { borderLeftColor: workout.color }]}>
         <View style={{ flex: 1 }}>
           <Text style={s.workoutDay}>{dayName}</Text>
@@ -252,11 +252,10 @@ function TodayTab({
         </View>
       </View>
 
-      {/* Session progress bar */}
       {totalSets > 0 && (
         <View style={s.progressBar}>
           <View style={s.progressTrack}>
-            <View style={[s.progressFill, { width: `${progress * 100}%`, backgroundColor: workout.color }]} />
+            <View style={[s.progressFill, { width: `${prog * 100}%`, backgroundColor: workout.color }]} />
           </View>
           <Text style={s.progressLabel}>{completedSets} / {totalSets} sets done</Text>
         </View>
@@ -264,7 +263,7 @@ function TodayTab({
 
       {workout.postureWarmup?.length > 0 && (
         <PostureBlock
-          title="Posture Warm-Up"
+          title="Posture warm-up"
           subtitle="5 min · do this before you start"
           icon="body" iconColor={colors.info}
           items={workout.postureWarmup}
@@ -273,28 +272,32 @@ function TodayTab({
         />
       )}
 
-      <SectionLabel text="Main Workout" icon="barbell-outline" color={workout.color} />
-      {workout.exercises?.map(ex => (
-        <ExerciseCard
-          key={ex.id}
-          exercise={ex}
-          expanded={expandedId === ex.id}
-          onToggle={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
-          accentColor={workout.color}
-          onInfo={() => onInfo(ex)}
-<<<<<<< HEAD
-          isToday
-=======
-          sets={sessionSets[ex.id] || []}
-          onSetUpdate={(idx, field, val) => onSetUpdate(ex.id, idx, field, val)}
-          prevRef={getPrevRef(ex.id)}
->>>>>>> 15f82f6 (feat: per-set weight tracking with smart suggestions)
-        />
-      ))}
+      <Text style={s.sectionDivider}>Today's exercises</Text>
+      {workout.exercises?.map(ex => {
+        const sparkline = getSparklineData(setLogs, ex.id);
+        const pr = getExercisePR(setLogs, ex.id);
+        const prevRef = getPrevRef(ex.id);
+        const isPR = pr && prevRef && prevRef.avg >= pr;
+        return (
+          <ExerciseCard
+            key={ex.id}
+            exercise={ex}
+            expanded={expandedId === ex.id}
+            onToggle={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
+            accentColor={workout.color}
+            onInfo={() => onInfo(ex)}
+            sets={sessionSets[ex.id] || []}
+            onSetUpdate={(idx, field, val) => onSetUpdate(ex.id, idx, field, val)}
+            prevRef={prevRef}
+            sparkline={sparkline}
+            isPR={isPR}
+          />
+        );
+      })}
 
       {workout.postureCooldown?.length > 0 && (
         <PostureBlock
-          title="Posture Cooldown"
+          title="Posture cooldown"
           subtitle="5 min · finish every session with this"
           icon="leaf" iconColor={colors.success}
           items={workout.postureCooldown}
@@ -309,7 +312,7 @@ function TodayTab({
         activeOpacity={0.8}
       >
         <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color="#fff" />
-        <Text style={s.completeBtnText}>{isDone ? 'Session Logged ✓' : 'Mark as Complete'}</Text>
+        <Text style={s.completeBtnText}>{isDone ? 'Session logged ✓' : 'Mark as complete'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -317,55 +320,65 @@ function TodayTab({
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef, sparkline, isPR }) {
   const completedCount = sets.filter(s => s.completed).length;
   const allDone = completedCount === sets.length && sets.length > 0;
+  const lastWeight = prevRef?.avg;
 
   return (
     <View style={[s.exCard, allDone && { borderColor: colors.success + '70' }]}>
       <TouchableOpacity style={s.exCardTop} onPress={onToggle} activeOpacity={0.8}>
-        <View style={[s.exColorBar, { backgroundColor: allDone ? colors.success : accentColor }]} />
+        {/* Icon with dark bg */}
+        <View style={s.exIconWrap}>
+          <Ionicons name="barbell-outline" size={16} color={accentColor} />
+        </View>
+
         <View style={{ flex: 1 }}>
-          <Text style={s.exName}>{exercise.name}</Text>
-          <View style={s.exMeta}>
-            <Chip text={`${exercise.sets} sets`} />
-            <Chip text={exercise.reps} />
-            <Chip text={`Rest ${exercise.rest}`} />
+          <View style={s.exNameRow}>
+            <Text style={s.exName}>{exercise.name}</Text>
+            {isPR && (
+              <View style={s.prBadge}>
+                <Text style={s.prBadgeText}>PR</Text>
+              </View>
+            )}
             {allDone && (
-              <View style={[s.chip, { backgroundColor: colors.success + '25', borderColor: colors.success + '50' }]}>
-                <Text style={[s.chipText, { color: colors.success }]}>Done ✓</Text>
+              <View style={s.doneBadge}>
+                <Text style={s.doneBadgeText}>Done ✓</Text>
               </View>
             )}
           </View>
+          <Text style={s.exMeta}>
+            {exercise.sets} sets{lastWeight ? ` · last ${lastWeight} kg` : ` · ${exercise.reps}`}
+          </Text>
         </View>
-        {prevRef && (
-          <Text style={s.prevWeightBadge}>{prevRef.avg}kg</Text>
+
+        {/* Sparkline */}
+        {sparkline.length > 1 && (
+          <Sparkline data={sparkline} color={accentColor} />
         )}
+
         <TouchableOpacity
           style={s.infoBtn}
           onPress={e => { e.stopPropagation?.(); onInfo(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="information-circle-outline" size={22} color={colors.info} />
+          <Ionicons name="information-circle-outline" size={20} color={colors.textMuted} />
         </TouchableOpacity>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} style={{ marginLeft: 2 }} />
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} style={{ marginLeft: 2 }} />
       </TouchableOpacity>
 
       {expanded && (
         <View style={s.exExpanded}>
-          {/* Exercise details */}
           <View style={s.exDetails}>
             <DetailRow icon="body-outline" label="Muscles" value={exercise.muscles} />
             <DetailRow icon="construct-outline" label="Equipment" value={exercise.equipment} />
-            <DetailRow icon="bulb-outline" label="Form Tip" value={exercise.tips} />
+            <DetailRow icon="bulb-outline" label="Form tip" value={exercise.tips} />
             {exercise.postureNote && (
               <View style={s.postureNote}>
                 <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
               </View>
             )}
           </View>
-
-          {/* Set tracker */}
           <SetTracker
             sets={sets}
             exercise={exercise}
@@ -379,6 +392,29 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets,
   );
 }
 
+/* ─── Sparkline ─────────────────────────────────────────────────── */
+
+function Sparkline({ data, color }) {
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const H = 24, W = 6, GAP = 3;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: H, gap: GAP, marginRight: 6 }}>
+      {data.map((v, i) => {
+        const h = Math.max(4, Math.round(((v - min) / range) * (H - 4)) + 4);
+        const isLast = i === data.length - 1;
+        return (
+          <View key={i} style={{
+            width: W, height: h, borderRadius: 2,
+            backgroundColor: isLast ? color : color + '55',
+          }} />
+        );
+      })}
+    </View>
+  );
+}
+
 /* ─── Set Tracker ───────────────────────────────────────────────── */
 
 function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor }) {
@@ -387,23 +423,18 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor }) {
       <View style={st.header}>
         <View style={st.headerLeft}>
           <Ionicons name="barbell" size={14} color={accentColor} style={{ marginRight: 6 }} />
-          <Text style={[st.headerTitle, { color: accentColor }]}>TRACK SETS</Text>
+          <Text style={[st.headerTitle, { color: accentColor }]}>Track sets</Text>
         </View>
         {prevRef && (
-          <Text style={st.prevRef}>
-            Last session: {prevRef.avg} kg × {prevRef.sets} sets
-          </Text>
+          <Text style={st.prevRef}>Last session: {prevRef.avg} kg × {prevRef.sets} sets</Text>
         )}
       </View>
-
-      {/* Column labels */}
       <View style={st.colRow}>
-        <Text style={[st.colLabel, { width: 42 }]}>SET</Text>
-        <Text style={[st.colLabel, { flex: 1 }]}>WEIGHT</Text>
-        <Text style={[st.colLabel, { width: 70 }]}>FEEL</Text>
+        <Text style={[st.colLabel, { width: 42 }]}>Set</Text>
+        <Text style={[st.colLabel, { flex: 1 }]}>Weight</Text>
+        <Text style={[st.colLabel, { width: 70 }]}>Feel</Text>
         <View style={{ width: 36 }} />
       </View>
-
       {sets.map((set, i) => (
         <SetRow
           key={i}
@@ -414,7 +445,6 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor }) {
           accentColor={accentColor}
         />
       ))}
-
       <View style={st.legend}>
         <LegendItem color={colors.success} label="Easy → weight goes up next set" />
         <LegendItem color={colors.info}    label="Good → weight stays" />
@@ -428,7 +458,7 @@ function LegendItem({ color, label }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
-      <Text style={{ fontSize: 10, color: colors.textMuted }}>{label}</Text>
+      <Text style={{ fontFamily: 'Figtree_400Regular', fontSize: 10, color: colors.textMuted }}>{label}</Text>
     </View>
   );
 }
@@ -438,17 +468,10 @@ function LegendItem({ color, label }) {
 function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
   return (
     <View>
-      <View style={[
-        sr.row,
-        set.completed && sr.rowDone,
-        isNext && !set.completed && sr.rowActive,
-      ]}>
-        {/* Set number */}
+      <View style={[sr.row, set.completed && sr.rowDone, isNext && !set.completed && sr.rowActive]}>
         <View style={[sr.setNumBadge, set.completed && { backgroundColor: colors.success + '30' }]}>
           <Text style={[sr.setNum, set.completed && { color: colors.success }]}>{setNum}</Text>
         </View>
-
-        {/* Weight input */}
         <View style={{ flex: 1, marginHorizontal: 8 }}>
           {set.suggested && !set.completed && (
             <Text style={sr.suggestedLabel}>suggested</Text>
@@ -467,8 +490,6 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
             <Text style={sr.kgLabel}>kg</Text>
           </View>
         </View>
-
-        {/* Feedback display (after done) */}
         <View style={{ width: 70, alignItems: 'center' }}>
           {set.completed && set.feedback ? (
             <View style={[sr.fbDoneChip, { backgroundColor: getFeedbackColor(set.feedback) + '25', borderColor: getFeedbackColor(set.feedback) + '60' }]}>
@@ -478,26 +499,16 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
               </Text>
             </View>
           ) : !set.completed ? (
-            <Text style={{ fontSize: 11, color: colors.textMuted }}>—</Text>
+            <Text style={{ fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted }}>—</Text>
           ) : (
-            <Text style={{ fontSize: 11, color: colors.textMuted }}>rate it</Text>
+            <Text style={{ fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted }}>rate it</Text>
           )}
         </View>
-
-        {/* Complete toggle */}
         <TouchableOpacity
           style={sr.checkBtn}
           onPress={() => {
-            if (set.completed) {
-              // Uncomplete — clear feedback too
-              onUpdate('completed', false);
-              onUpdate('feedback', null);
-            } else {
-              if (!set.weight) {
-                // Allow completing without weight (bodyweight)
-              }
-              onUpdate('completed', true);
-            }
+            if (set.completed) { onUpdate('completed', false); onUpdate('feedback', null); }
+            else { onUpdate('completed', true); }
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
@@ -508,8 +519,6 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
           />
         </TouchableOpacity>
       </View>
-
-      {/* Feedback prompt — appears inline below the row when set just completed */}
       {set.completed && !set.feedback && (
         <View style={sr.feedbackPromptRow}>
           <Text style={sr.feedbackPromptLabel}>How was that set?</Text>
@@ -528,15 +537,11 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
           ))}
         </View>
       )}
-
-      {/* Auto-suggestion hint */}
       {set.completed && set.feedback && set.feedback !== 'good' && (
         <View style={sr.suggestionHint}>
           <Ionicons
             name={set.feedback === 'easy' ? 'trending-up' : 'trending-down'}
-            size={12}
-            color={getFeedbackColor(set.feedback)}
-            style={{ marginRight: 4 }}
+            size={12} color={getFeedbackColor(set.feedback)} style={{ marginRight: 4 }}
           />
           <Text style={[sr.suggestionHintText, { color: getFeedbackColor(set.feedback) }]}>
             {set.feedback === 'easy' ? 'Weight increased for next set' : 'Weight reduced for next set'}
@@ -572,9 +577,7 @@ function PostureBlock({ title, subtitle, icon, iconColor, items, expandedId, set
               <Text style={s.postureItemName}>{item.name}</Text>
               <Text style={s.postureItemReps}>{item.reps}</Text>
             </View>
-            {expandedId === item.id && (
-              <Text style={s.postureItemBenefit}>{item.benefit}</Text>
-            )}
+            {expandedId === item.id && <Text style={s.postureItemBenefit}>{item.benefit}</Text>}
           </View>
           <Ionicons name={expandedId === item.id ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
         </TouchableOpacity>
@@ -583,59 +586,6 @@ function PostureBlock({ title, subtitle, icon, iconColor, items, expandedId, set
   );
 }
 
-function SectionLabel({ text, icon, color }) {
-  return (
-    <View style={[s.sectionLabel, { borderLeftColor: color }]}>
-      <Ionicons name={icon} size={14} color={color} />
-      <Text style={[s.sectionLabelText, { color }]}>{text}</Text>
-    </View>
-  );
-}
-
-<<<<<<< HEAD
-/* ─── Exercise Card ─────────────────────────────────────────────── */
-
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday }) {
-  return (
-    <TouchableOpacity style={s.exCard} onPress={onToggle} activeOpacity={0.8}>
-      <View style={s.exCardTop}>
-        <View style={[s.exColorBar, { backgroundColor: accentColor }]} />
-        <View style={{ flex: 1 }}>
-          <Text style={s.exName}>{exercise.name}</Text>
-          <View style={s.exMeta}>
-            <Chip text={`${exercise.sets} sets`} />
-            <Chip text={exercise.reps} />
-            <Chip text={`Rest ${exercise.rest}`} />
-          </View>
-        </View>
-        <TouchableOpacity
-          style={s.infoBtn}
-          onPress={e => { e.stopPropagation?.(); onInfo(); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="information-circle-outline" size={22} color={colors.info} />
-        </TouchableOpacity>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} style={{ marginLeft: 4 }} />
-      </View>
-      {expanded && (
-        <View style={s.exDetails}>
-          <DetailRow icon="body-outline" label="Muscles" value={exercise.muscles} />
-          <DetailRow icon="construct-outline" label="Equipment" value={exercise.equipment} />
-          <DetailRow icon="bulb-outline" label="Form Tip" value={exercise.tips} />
-          {exercise.postureNote && (
-            <View style={s.postureNote}>
-              <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
-            </View>
-          )}
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} />}
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-}
-
-=======
->>>>>>> 15f82f6 (feat: per-set weight tracking with smart suggestions)
 function Chip({ text }) {
   return (
     <View style={s.chip}>
@@ -647,7 +597,7 @@ function Chip({ text }) {
 function DetailRow({ icon, label, value }) {
   return (
     <View style={s.detailRow}>
-      <Ionicons name={icon} size={14} color={colors.accentLight} style={{ marginRight: 6, marginTop: 2 }} />
+      <Ionicons name={icon} size={14} color={colors.textSec} style={{ marginRight: 6, marginTop: 2 }} />
       <View style={{ flex: 1 }}>
         <Text style={s.detailLabel}>{label}</Text>
         <Text style={s.detailValue}>{value}</Text>
@@ -663,7 +613,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
   if (!generatedPlan) {
     return (
       <View style={{ padding: 24, alignItems: 'center' }}>
-        <Text style={{ color: colors.textSec, fontSize: 14 }}>No plan generated yet.</Text>
+        <Text style={{ fontFamily: 'Figtree_400Regular', color: colors.textSec, fontSize: 14 }}>No plan generated yet.</Text>
       </View>
     );
   }
@@ -671,7 +621,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
   const trainingCount = Object.values(schedule).filter(Boolean).length;
 
   return (
-    <View style={{ paddingHorizontal: 16 }}>
+    <View style={{ paddingHorizontal: 20 }}>
       <View style={s.weekBanner}>
         <Text style={s.weekBannerText}>
           {trainingCount}-day personalised split. Weight tracked per set — the app learns your strength and suggests increases automatically.
@@ -682,11 +632,11 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
         const workout = workoutId ? workouts[workoutId] : null;
         const isToday = day === todayKey;
         return (
-          <View key={day} style={[s.weekRow, isToday && { borderColor: colors.accent }]}>
+          <View key={day} style={[s.weekRow, isToday && { borderColor: colors.accent + '80' }]}>
             <View style={[s.weekDot, { backgroundColor: workout ? workout.color : colors.border }]} />
             <View style={{ flex: 1 }}>
               <View style={s.weekRowTop}>
-                <Text style={[s.weekDay, isToday && { color: colors.accentLight }]}>{day}</Text>
+                <Text style={[s.weekDay, isToday && { color: colors.text }]}>{day}</Text>
                 {isToday && <View style={s.todayBadge}><Text style={s.todayBadgeText}>Today</Text></View>}
               </View>
               {workout ? (
@@ -697,7 +647,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
                   </Text>
                 </>
               ) : (
-                <Text style={s.weekWorkout}>Rest Day · active recovery</Text>
+                <Text style={s.weekWorkout}>Rest day · active recovery</Text>
               )}
             </View>
           </View>
@@ -714,17 +664,17 @@ function PostureGuideTab({ expandedId, setExpandedId }) {
   const high = POSTURE_EXERCISES.filter(e => e.priority === 'HIGH');
   const medium = POSTURE_EXERCISES.filter(e => e.priority === 'MEDIUM');
   return (
-    <View style={{ paddingHorizontal: 16 }}>
+    <View style={{ paddingHorizontal: 20 }}>
       <View style={s.postureBanner}>
         <Ionicons name="warning" size={15} color={colors.warning} style={{ marginRight: 8 }} />
         <Text style={s.postureBannerText}>
           These are embedded in your workouts. This tab is your reference guide — also do critical ones at your desk.
         </Text>
       </View>
-      <PostureGuideSection title="Critical — Also Do At Your Desk" exercises={critical} color={colors.secondary} expandedId={expandedId} setExpandedId={setExpandedId} />
-      <PostureGuideSection title="High Priority" exercises={high} color={colors.warning} expandedId={expandedId} setExpandedId={setExpandedId} />
+      <PostureGuideSection title="Critical — also do at your desk" exercises={critical} color={colors.secondary} expandedId={expandedId} setExpandedId={setExpandedId} />
+      <PostureGuideSection title="High priority" exercises={high} color={colors.warning} expandedId={expandedId} setExpandedId={setExpandedId} />
       {medium.length > 0 && (
-        <PostureGuideSection title="Good Addition" exercises={medium} color={colors.success} expandedId={expandedId} setExpandedId={setExpandedId} />
+        <PostureGuideSection title="Good addition" exercises={medium} color={colors.success} expandedId={expandedId} setExpandedId={setExpandedId} />
       )}
     </View>
   );
@@ -754,7 +704,7 @@ function PostureGuideSection({ title, exercises, color, expandedId, setExpandedI
               <Text style={s.guideRow}>🎯 <Text style={s.guideRowLabel}>Target: </Text>{ex.targetArea}</Text>
               <Text style={s.guideRow}>💡 <Text style={s.guideRowLabel}>Why: </Text>{ex.benefit}</Text>
               <Text style={s.guideRow}>📋 <Text style={s.guideRowLabel}>How: </Text>{ex.howTo}</Text>
-              <Text style={[s.guideRow, { color: colors.accentLight }]}>⏱ <Text style={[s.guideRowLabel, { color: colors.accentLight }]}>Frequency: </Text>{ex.frequency}</Text>
+              <Text style={[s.guideRow, { color: colors.textSec }]}>⏱ <Text style={[s.guideRowLabel, { color: colors.textSec }]}>Frequency: </Text>{ex.frequency}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -815,424 +765,246 @@ function ExerciseInfoModal({ exercise, onClose }) {
   );
 }
 
-/* ─── Set Logger ─────────────────────────────────────────────────── */
-
-const FEEDBACK_COLORS = { easy: colors.success, good: colors.accentLight, hard: colors.secondary };
-const FEEDBACK_LABELS = { easy: 'Too Easy', good: 'Just Right', hard: 'Too Hard' };
-
-function getSuggestion(setLogs, exerciseId, setIdx, today) {
-  const relevant = setLogs
-    .filter(l => l.exerciseId === exerciseId && l.setNumber === setIdx + 1 && l.date !== today)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  if (!relevant.length) return null;
-  const last = relevant[0];
-  let weight = last.weight;
-  let reason = 'felt right';
-  if (last.feedback === 'easy') { weight = Math.round((weight + 2.5) * 2) / 2; reason = 'easy last time'; }
-  else if (last.feedback === 'hard') { weight = Math.max(0, Math.round((weight - 2.5) * 2) / 2); reason = 'hard last time'; }
-  return { weight, reason };
-}
-
-function SetLogger({ exercise, accentColor }) {
-  const { state, dispatch } = useApp();
-  const setLogs = state.progress.setLogs || [];
-  const today = new Date().toISOString().split('T')[0];
-  const numSets = exercise.sets;
-
-  const [sets, setSets] = React.useState(() =>
-    Array.from({ length: numSets }, () => ({ weight: '', reps: '', feedback: null, saved: false }))
-  );
-
-  function setField(idx, field, value) {
-    setSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
-  }
-
-  function applysuggestion(idx) {
-    const s = getSuggestion(setLogs, exercise.id, idx, today);
-    if (s) setField(idx, 'weight', String(s.weight));
-  }
-
-  function handleSave(idx) {
-    const set = sets[idx];
-    const w = parseFloat(set.weight);
-    const r = parseInt(set.reps, 10);
-    if (isNaN(w) || w <= 0 || isNaN(r) || r <= 0) {
-      Alert.alert('Missing info', 'Enter weight (kg) and reps before saving this set.');
-      return;
-    }
-    dispatch({
-      type: 'LOG_SET',
-      payload: {
-        date: today,
-        exerciseId: exercise.id,
-        exerciseName: exercise.name,
-        setNumber: idx + 1,
-        weight: w,
-        reps: r,
-        feedback: set.feedback || 'good',
-      },
-    });
-    setSets(prev => prev.map((s, i) => i === idx ? { ...s, saved: true } : s));
-  }
-
-  const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0] : '10';
-
-  return (
-    <View style={sl.container}>
-      <View style={sl.header}>
-        <Ionicons name="barbell-outline" size={13} color={accentColor} />
-        <Text style={[sl.headerText, { color: accentColor }]}>LOG SETS</Text>
-      </View>
-      {sets.map((set, idx) => {
-        const suggestion = getSuggestion(setLogs, exercise.id, idx, today);
-        return (
-          <View key={idx} style={[sl.setRow, set.saved && sl.setRowSaved]}>
-            <View style={sl.setTopRow}>
-              <Text style={sl.setLabel}>Set {idx + 1}</Text>
-              {set.saved ? (
-                <View style={sl.savedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-                  <Text style={sl.savedText}>{set.weight} kg × {set.reps} reps</Text>
-                </View>
-              ) : suggestion ? (
-                <TouchableOpacity style={sl.suggestionRow} onPress={() => applysuggestion(idx)}>
-                  <Text style={sl.suggestionText}>↗ {suggestion.weight} kg · {suggestion.reason}</Text>
-                  <Text style={sl.useBtn}>Use</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={sl.noHistory}>No history — start light</Text>
-              )}
-            </View>
-            {!set.saved && (
-              <>
-                <View style={sl.inputRow}>
-                  <View style={sl.inputGroup}>
-                    <Text style={sl.inputLabel}>Weight (kg)</Text>
-                    <TextInput
-                      style={sl.input}
-                      value={set.weight}
-                      onChangeText={v => setField(idx, 'weight', v)}
-                      keyboardType="decimal-pad"
-                      placeholder={suggestion ? String(suggestion.weight) : '0'}
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  </View>
-                  <View style={sl.inputGroup}>
-                    <Text style={sl.inputLabel}>Reps done</Text>
-                    <TextInput
-                      style={sl.input}
-                      value={set.reps}
-                      onChangeText={v => setField(idx, 'reps', v)}
-                      keyboardType="number-pad"
-                      placeholder={targetReps}
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  </View>
-                </View>
-                <View style={sl.feedbackRow}>
-                  {['easy', 'good', 'hard'].map(fb => (
-                    <TouchableOpacity
-                      key={fb}
-                      style={[
-                        sl.fbBtn,
-                        set.feedback === fb && {
-                          backgroundColor: FEEDBACK_COLORS[fb] + '25',
-                          borderColor: FEEDBACK_COLORS[fb],
-                        },
-                      ]}
-                      onPress={() => setField(idx, 'feedback', fb)}
-                    >
-                      <Text style={[sl.fbText, set.feedback === fb && { color: FEEDBACK_COLORS[fb] }]}>
-                        {FEEDBACK_LABELS[fb]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity style={[sl.saveSetBtn, { backgroundColor: accentColor }]} onPress={() => handleSave(idx)}>
-                    <Ionicons name="checkmark" size={16} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 /* ─── Styles ─────────────────────────────────────────────────────── */
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 28, color: colors.text, fontWeight: '700' },
-  subtitle: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  header: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
+  title: { fontFamily: 'BebasNeue_400Regular', fontSize: 34, color: colors.text, letterSpacing: 0.5 },
+  subtitle: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textSec, marginTop: 3 },
   tabBar: {
-    flexDirection: 'row', marginHorizontal: 16, marginBottom: 8,
-    backgroundColor: colors.surface, borderRadius: 12, padding: 4,
+    flexDirection: 'row', marginHorizontal: 20, marginBottom: 10,
+    backgroundColor: colors.surface, borderRadius: 14, padding: 4,
     borderWidth: 1, borderColor: colors.border,
   },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.accent },
-  tabText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  tabTextActive: { color: '#fff' },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center' },
+  tabActive: { backgroundColor: colors.card },
+  tabText: { fontFamily: 'Figtree_600SemiBold', fontSize: 12, color: colors.textMuted },
+  tabTextActive: { color: colors.text },
   scroll: { flex: 1 },
 
   restContainer: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
-  restTitle: { fontSize: 26, color: colors.text, fontWeight: '700', marginTop: 16 },
-  restSubtitle: { fontSize: 14, color: colors.textSec, marginTop: 6, textAlign: 'center' },
+  restTitle: { fontFamily: 'BebasNeue_400Regular', fontSize: 32, color: colors.text, marginTop: 16, letterSpacing: 0.5 },
+  restSubtitle: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 14, color: colors.textSec, marginTop: 6, textAlign: 'center' },
   restTip: {
-    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.card,
-    borderRadius: 12, padding: 14, marginTop: 24, borderWidth: 1, borderColor: colors.border,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surface,
+    borderRadius: 14, padding: 14, marginTop: 24, borderWidth: 1, borderColor: colors.border,
   },
-  restTipText: { flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 20 },
+  restTipText: { fontFamily: 'Figtree_400Regular', flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 20 },
 
   workoutHeader: {
-    backgroundColor: colors.card, borderRadius: 14, padding: 16,
+    backgroundColor: colors.surface, borderRadius: 16, padding: 16,
     marginTop: 8, marginBottom: 10, flexDirection: 'row',
     justifyContent: 'space-between', alignItems: 'flex-start',
     borderLeftWidth: 4, borderWidth: 1, borderColor: colors.border,
   },
-  workoutDay: { fontSize: 12, color: colors.textSec, fontWeight: '500' },
-  workoutName: { fontSize: 20, color: colors.text, fontWeight: '700', marginTop: 2 },
-  workoutFocus: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  workoutDay: { fontFamily: 'Figtree_500Medium', fontSize: 11, color: colors.textSec, textTransform: 'uppercase', letterSpacing: 0.5 },
+  workoutName: { fontFamily: 'BebasNeue_400Regular', fontSize: 26, color: colors.text, marginTop: 2, letterSpacing: 0.5 },
+  workoutFocus: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textSec, marginTop: 2 },
   durationBadge: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 4,
+    backgroundColor: colors.bg, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, gap: 4,
   },
-  durationText: { fontSize: 11, color: colors.textSec },
+  durationText: { fontFamily: 'Figtree_500Medium', fontSize: 11, color: colors.textSec },
 
   progressBar: {
-    marginBottom: 12,
-    backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginBottom: 12, backgroundColor: colors.surface,
+    borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border,
   },
-  progressTrack: {
-    height: 6, backgroundColor: colors.surface, borderRadius: 3, overflow: 'hidden', marginBottom: 6,
-  },
+  progressTrack: { height: 5, backgroundColor: colors.bg, borderRadius: 3, overflow: 'hidden', marginBottom: 6 },
   progressFill: { height: '100%', borderRadius: 3 },
-  progressLabel: { fontSize: 11, color: colors.textSec, textAlign: 'right' },
+  progressLabel: { fontFamily: 'Figtree_500Medium', fontSize: 11, color: colors.textSec, textAlign: 'right' },
 
-  postureBlock: { borderRadius: 14, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
+  sectionDivider: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 11,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8, marginTop: 4,
+  },
+
+  postureBlock: { borderRadius: 16, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
   postureBlockHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
-  postureBlockTitle: { fontSize: 13, fontWeight: '700' },
-  postureBlockSubtitle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  postureBlockTitle: { fontFamily: 'Figtree_700Bold', fontSize: 13 },
+  postureBlockSubtitle: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textMuted, marginTop: 1 },
   postureItem: {
     flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: 12, paddingVertical: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
     borderTopWidth: 1, borderTopColor: colors.border, gap: 10,
   },
   postureItemIcon: { fontSize: 20, width: 28, textAlign: 'center', marginTop: 1 },
   postureItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1, marginRight: 6 },
-  postureItemName: { fontSize: 13, color: colors.text, fontWeight: '600', flex: 1 },
-  postureItemReps: { fontSize: 11, color: colors.textSec, marginLeft: 8 },
-  postureItemBenefit: { fontSize: 12, color: colors.textSec, lineHeight: 18, marginTop: 4 },
-
-  sectionLabel: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderLeftWidth: 3, paddingLeft: 8, marginBottom: 8, marginTop: 4,
-  },
-  sectionLabelText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  postureItemName: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text, flex: 1 },
+  postureItemReps: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textSec, marginLeft: 8 },
+  postureItemBenefit: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec, lineHeight: 18, marginTop: 4 },
 
   exCard: {
-    backgroundColor: colors.card, borderRadius: 14, marginBottom: 8,
+    backgroundColor: colors.surface, borderRadius: 16, marginBottom: 8,
     overflow: 'hidden', borderWidth: 1, borderColor: colors.border,
   },
-  exCardTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 8 },
+  exCardTop: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, gap: 10 },
   exExpanded: { borderTopWidth: 1, borderTopColor: colors.border },
   infoBtn: { padding: 2 },
-  exColorBar: { width: 3, height: 40, borderRadius: 2 },
-  exName: { fontSize: 14, color: colors.text, fontWeight: '600', marginBottom: 6 },
-  exMeta: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  chip: { backgroundColor: colors.surface, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: 'transparent' },
-  chipText: { fontSize: 10, color: colors.textSec, fontWeight: '500' },
-  prevWeightBadge: {
-    fontSize: 11, color: colors.accentLight, fontWeight: '700',
-    backgroundColor: colors.accentDim + '40', borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2,
+  exIconWrap: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: colors.bg,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border,
   },
+  exNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  exName: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text },
+  exMeta: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textSec },
+  prBadge: {
+    backgroundColor: colors.statCard,
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  prBadgeText: { fontFamily: 'Figtree_700Bold', fontSize: 9, color: '#fff' },
+  doneBadge: {
+    backgroundColor: colors.success + '25',
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+    borderWidth: 1, borderColor: colors.success + '50',
+  },
+  doneBadgeText: { fontFamily: 'Figtree_600SemiBold', fontSize: 9, color: colors.success },
+  chip: { backgroundColor: colors.bg, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: colors.border },
+  chipText: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: colors.textSec },
   exDetails: {
     paddingHorizontal: 14, paddingBottom: 12, gap: 8, paddingTop: 12,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  detailLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
-  detailValue: { fontSize: 13, color: colors.textSec, lineHeight: 19 },
+  detailLabel: { fontFamily: 'Figtree_600SemiBold', fontSize: 10, color: colors.textMuted, marginBottom: 2 },
+  detailValue: { fontFamily: 'Figtree_400Regular', fontSize: 13, color: colors.textSec, lineHeight: 19 },
   postureNote: {
-    backgroundColor: colors.accentDim + '55', borderRadius: 8, padding: 10,
-    borderLeftWidth: 3, borderLeftColor: colors.accentLight,
+    backgroundColor: colors.surface, borderRadius: 10, padding: 10,
+    borderLeftWidth: 3, borderLeftColor: colors.textSec,
   },
-  postureNoteText: { fontSize: 12, color: colors.accentLight, lineHeight: 18 },
+  postureNoteText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec, lineHeight: 18 },
 
   completeBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 16,
+    backgroundColor: colors.accent, borderRadius: 16, paddingVertical: 16,
     marginTop: 16, marginBottom: 8, gap: 8,
   },
   completeBtnDone: { backgroundColor: colors.success },
-  completeBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+  completeBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: '#fff' },
 
   weekBanner: {
-    backgroundColor: colors.card, borderRadius: 12, padding: 14,
+    backgroundColor: colors.surface, borderRadius: 14, padding: 14,
     marginTop: 8, marginBottom: 14, borderWidth: 1, borderColor: colors.border,
   },
-  weekBannerText: { fontSize: 13, color: colors.textSec, lineHeight: 20 },
+  weekBannerText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textSec, lineHeight: 20 },
   weekRow: {
-    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.card,
-    borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border, gap: 12,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surface,
+    borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border, gap: 12,
   },
   weekDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   weekRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-  weekDay: { fontSize: 13, color: colors.text, fontWeight: '700' },
-  weekWorkout: { fontSize: 12, color: colors.textSec, marginTop: 2 },
-  weekPosture: { fontSize: 11, color: colors.accentLight, marginTop: 3, fontStyle: 'italic' },
-  todayBadge: { backgroundColor: colors.accentDim, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-  todayBadgeText: { fontSize: 10, color: colors.accentLight, fontWeight: '700' },
+  weekDay: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.textSec },
+  weekWorkout: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textSec, marginTop: 2 },
+  weekPosture: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textMuted, marginTop: 3 },
+  todayBadge: { backgroundColor: colors.accent + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  todayBadgeText: { fontFamily: 'Figtree_700Bold', fontSize: 10, color: colors.accent },
 
   postureBanner: {
-    flexDirection: 'row', backgroundColor: colors.warning + '18', borderRadius: 12,
+    flexDirection: 'row', backgroundColor: colors.warning + '18', borderRadius: 14,
     padding: 14, marginTop: 8, marginBottom: 16, borderWidth: 1,
     borderColor: colors.warning + '40', alignItems: 'flex-start',
   },
-  postureBannerText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 19 },
-  guideSection: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
+  postureBannerText: { fontFamily: 'Figtree_400Regular', flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 19 },
+  guideSection: { fontFamily: 'Figtree_700Bold', fontSize: 12, letterSpacing: 0.4, marginBottom: 8, marginTop: 4 },
   guideCard: {
-    backgroundColor: colors.card, borderRadius: 12, marginBottom: 8,
+    backgroundColor: colors.surface, borderRadius: 14, marginBottom: 8,
     overflow: 'hidden', borderWidth: 1, borderColor: colors.border,
   },
   guideCardTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
   guideIcon: { fontSize: 22, width: 34, textAlign: 'center' },
-  guideName: { fontSize: 14, color: colors.text, fontWeight: '600' },
-  guideMeta: { fontSize: 11, color: colors.textSec, marginTop: 2 },
+  guideName: { fontFamily: 'Figtree_600SemiBold', fontSize: 14, color: colors.text },
+  guideMeta: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textSec, marginTop: 2 },
   guideExpanded: { padding: 14, paddingTop: 0, gap: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: 14 },
-  guideRow: { fontSize: 12, color: colors.textSec, lineHeight: 19 },
-  guideRowLabel: { fontWeight: '700', color: colors.textSec },
+  guideRow: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textSec, lineHeight: 19 },
+  guideRowLabel: { fontFamily: 'Figtree_700Bold', color: colors.textSec },
 });
-
-/* ─── Set Tracker Styles ─────────────────────────────────────────── */
 
 const st = StyleSheet.create({
   container: {
-    margin: 12,
-    backgroundColor: colors.bg,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
+    margin: 12, backgroundColor: colors.bg,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
-  prevRef: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
+  headerTitle: { fontFamily: 'Figtree_600SemiBold', fontSize: 12 },
+  prevRef: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 10, color: colors.textMuted },
   colRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
     backgroundColor: colors.surface + '80',
   },
-  colLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  colLabel: { fontFamily: 'Figtree_600SemiBold', fontSize: 9, color: colors.textMuted, letterSpacing: 0.4 },
   legend: {
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: 2,
+    padding: 10, borderTopWidth: 1, borderTopColor: colors.border, gap: 2,
     backgroundColor: colors.surface + '50',
   },
 });
 
-/* ─── Set Row Styles ─────────────────────────────────────────────── */
-
 const sr = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + '80',
-    gap: 4,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: colors.border + '80', gap: 4,
   },
-  rowActive: { backgroundColor: colors.accentDim + '15' },
+  rowActive: { backgroundColor: colors.card + '80' },
   rowDone: { backgroundColor: colors.success + '08' },
-
   setNumBadge: {
     width: 30, height: 30, borderRadius: 15,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border,
   },
-  setNum: { fontSize: 13, color: colors.textSec, fontWeight: '700' },
-
+  setNum: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.textSec },
   weightRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  suggestedLabel: { fontSize: 9, color: colors.accentLight, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
+  suggestedLabel: { fontFamily: 'Figtree_500Medium', fontSize: 9, color: colors.textSec, letterSpacing: 0.4, marginBottom: 2 },
   weightInput: {
-    width: 60, height: 36,
-    backgroundColor: colors.card,
+    width: 60, height: 36, backgroundColor: colors.surface,
     borderRadius: 8, borderWidth: 1, borderColor: colors.border,
-    textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text,
+    textAlign: 'center', fontFamily: 'Figtree_700Bold', fontSize: 16, color: colors.text,
   },
   weightInputDone: {
-    backgroundColor: colors.success + '15',
-    borderColor: colors.success + '40',
-    color: colors.success,
+    backgroundColor: colors.success + '15', borderColor: colors.success + '40', color: colors.success,
   },
-  kgLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
-
+  kgLabel: { fontFamily: 'Figtree_600SemiBold', fontSize: 12, color: colors.textMuted },
   fbDoneChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
-    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3,
-    borderWidth: 1,
+    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1,
   },
-  fbDoneText: { fontSize: 10, fontWeight: '700' },
-
+  fbDoneText: { fontFamily: 'Figtree_700Bold', fontSize: 10 },
   checkBtn: { width: 36, alignItems: 'center', justifyContent: 'center' },
-
   feedbackPromptRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 8,
     backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + '80',
-    gap: 8,
+    borderBottomWidth: 1, borderBottomColor: colors.border + '80', gap: 8,
   },
-  feedbackPromptLabel: { fontSize: 11, color: colors.textSec, fontWeight: '600', marginRight: 4 },
+  feedbackPromptLabel: { fontFamily: 'Figtree_600SemiBold', fontSize: 11, color: colors.textSec, marginRight: 4 },
   fbBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 8, borderWidth: 1,
   },
-  fbBtnText: { fontSize: 12, fontWeight: '700' },
-
+  fbBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 12 },
   suggestionHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 56,
-    paddingVertical: 5,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 56, paddingVertical: 5,
     backgroundColor: colors.surface + '60',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + '80',
+    borderBottomWidth: 1, borderBottomColor: colors.border + '80',
   },
-  suggestionHintText: { fontSize: 10, fontWeight: '600' },
+  suggestionHintText: { fontFamily: 'Figtree_600SemiBold', fontSize: 10 },
 });
-
-/* ─── Modal Styles ───────────────────────────────────────────────── */
 
 const m = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
@@ -1245,51 +1017,17 @@ const m = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  title: { fontSize: 17, color: colors.text, fontWeight: '700', flex: 1, marginRight: 12 },
+  title: { fontFamily: 'BebasNeue_400Regular', fontSize: 22, color: colors.text, flex: 1, marginRight: 12, letterSpacing: 0.5 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
   scroll: { paddingHorizontal: 20 },
-  sectionTitle: { fontSize: 13, color: colors.textSec, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 16, marginBottom: 10 },
+  sectionTitle: { fontFamily: 'Figtree_700Bold', fontSize: 12, color: colors.textSec, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 16, marginBottom: 10 },
   step: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 12 },
-  stepNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  stepNumText: { fontSize: 12, color: colors.accentLight, fontWeight: '700' },
-  stepText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 20 },
+  stepNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  stepNumText: { fontFamily: 'Figtree_700Bold', fontSize: 12, color: colors.textSec },
+  stepText: { fontFamily: 'Figtree_400Regular', flex: 1, fontSize: 13, color: colors.text, lineHeight: 20 },
   mistake: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  mistakeText: { flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 19 },
-  postureNote: { backgroundColor: colors.accentDim + '55', borderRadius: 10, padding: 12, borderLeftWidth: 3, borderLeftColor: colors.accentLight, marginTop: 12 },
-  postureNoteText: { fontSize: 12, color: colors.accentLight, lineHeight: 18 },
-});
-
-const sl = StyleSheet.create({
-  container: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, marginTop: 4 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  headerText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-  setRow: {
-    backgroundColor: colors.surface, borderRadius: 10, padding: 10,
-    marginBottom: 8, borderWidth: 1, borderColor: colors.border,
-  },
-  setRowSaved: { borderColor: colors.success + '50', backgroundColor: colors.success + '0D' },
-  setTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  setLabel: { fontSize: 12, color: colors.text, fontWeight: '700' },
-  suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  suggestionText: { fontSize: 11, color: colors.accentLight, fontStyle: 'italic' },
-  useBtn: { fontSize: 10, color: colors.accent, fontWeight: '700', borderWidth: 1, borderColor: colors.accent, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
-  noHistory: { fontSize: 11, color: colors.textMuted, fontStyle: 'italic' },
-  savedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  savedText: { fontSize: 12, color: colors.success, fontWeight: '600' },
-  inputRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  inputGroup: { flex: 1 },
-  inputLabel: { fontSize: 10, color: colors.textMuted, marginBottom: 4, fontWeight: '500', textTransform: 'uppercase' },
-  input: {
-    backgroundColor: colors.card, borderRadius: 8, paddingHorizontal: 10,
-    paddingVertical: 8, fontSize: 15, color: colors.text,
-    borderWidth: 1, borderColor: colors.border, textAlign: 'center', fontWeight: '600',
-  },
-  feedbackRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  fbBtn: {
-    flex: 1, borderRadius: 7, paddingVertical: 6,
-    borderWidth: 1, borderColor: colors.border, alignItems: 'center',
-  },
-  fbText: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
-  saveSetBtn: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  mistakeText: { fontFamily: 'Figtree_400Regular', flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 19 },
+  postureNote: { backgroundColor: colors.card, borderRadius: 10, padding: 12, borderLeftWidth: 3, borderLeftColor: colors.textSec, marginTop: 12 },
+  postureNoteText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec, lineHeight: 18 },
 });

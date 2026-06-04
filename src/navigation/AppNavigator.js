@@ -10,7 +10,6 @@ import { useApp } from '../context/AppContext';
 import HomeScreen from '../screens/HomeScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import CoachScreen from '../screens/CoachScreen';
-import PhotoScanScreen from '../screens/PhotoScanScreen';
 import ProgressScreen from '../screens/ProgressScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -19,11 +18,10 @@ const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 const TAB_ICONS = {
-  Home: ['home', 'home-outline'],
-  Workout: ['barbell', 'barbell-outline'],
-  Coach: ['chatbubble-ellipses', 'chatbubble-ellipses-outline'],
-  Scan: ['camera', 'camera-outline'],
-  Progress: ['stats-chart', 'stats-chart-outline'],
+  Home:      ['home',                'home-outline'],
+  Workouts:  ['barbell',             'barbell-outline'],
+  Coach:     ['chatbubble-ellipses', 'chatbubble-ellipses-outline'],
+  Progress:  ['stats-chart',         'stats-chart-outline'],
 };
 
 function MainTabs() {
@@ -42,7 +40,10 @@ function MainTabs() {
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+        tabBarLabelStyle: {
+          fontFamily: 'Figtree_600SemiBold',
+          fontSize: 10,
+        },
         tabBarIcon: ({ focused, color }) => {
           const [active, inactive] = TAB_ICONS[route.name];
           return <Ionicons name={focused ? active : inactive} size={22} color={color} />;
@@ -50,9 +51,8 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Workout" component={WorkoutScreen} />
+      <Tab.Screen name="Workouts" component={WorkoutScreen} />
       <Tab.Screen name="Coach" component={CoachScreen} />
-      <Tab.Screen name="Scan" component={PhotoScanScreen} />
       <Tab.Screen name="Progress" component={ProgressScreen} />
     </Tab.Navigator>
   );

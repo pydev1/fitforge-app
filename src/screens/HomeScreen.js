@@ -6,14 +6,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { MOTIVATIONAL_QUOTES } from '../data/workoutData';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'Good Morning';
-  if (h < 17) return 'Good Afternoon';
-  return 'Good Evening';
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 function getDailyQuote() {
@@ -29,18 +31,53 @@ function getTodayWorkout(generatedPlan) {
   return workout ? { ...workout, dayName } : { isRest: true, dayName };
 }
 
-// Returns array of 7 booleans: did user work out on each of the last 7 days?
-function getLast7DayActivity(completedWorkouts) {
+function getContextLine(todayWorkout) {
+  if (!todayWorkout) return 'Let\'s get moving today.';
+  if (todayWorkout.isRest) return 'Rest day today — you\'ve earned it.';
+  return `${todayWorkout.name} today — ${todayWorkout.focus}.`;
+}
+
+// Count workouts done this week and total scheduled
+function getWeekStats(generatedPlan, completedWorkouts) {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=Sun
+  // Days since Monday
+  const sinceMonday = (dayOfWeek + 6) % 7;
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - sinceMonday);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const doneThisWeek = completedWorkouts.filter(w => {
+    const d = new Date(w.date);
+    return d >= weekStart;
+  }).length;
+
+  const scheduled = generatedPlan
+    ? Object.values(generatedPlan.schedule).filter(Boolean).length
+    : 0;
+
+  return { done: doneThisWeek, total: scheduled };
+}
+
+// 7-day activity array (Sun=0 to Sat=6, today is last)
+function getWeekActivity(completedWorkouts) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Build from Monday of this week
+  const dayOfWeek = today.getDay();
+  const sinceMonday = (dayOfWeek + 6) % 7;
+
   return Array.from({ length: 7 }, (_, i) => {
     const day = new Date(today);
-    day.setDate(today.getDate() - (6 - i));
-    return completedWorkouts.some(w => {
-      const d = new Date(w.date || w.completedAt || 0);
+    day.setDate(today.getDate() - sinceMonday + i);
+    const isToday = i === sinceMonday;
+    const isFuture = day > today;
+    const active = completedWorkouts.some(w => {
+      const d = new Date(w.date);
       d.setHours(0, 0, 0, 0);
       return d.getTime() === day.getTime();
     });
+    return { dayLetter: DAY_LETTERS[day.getDay()], active, isToday, isFuture };
   });
 }
 
@@ -57,162 +94,157 @@ export default function HomeScreen({ navigation }) {
     ? (currentWeight - firstWeight.value).toFixed(1)
     : null;
   const totalWorkouts = progress.completedWorkouts.length;
+
   const currentWaist = progress.waist?.[progress.waist.length - 1]?.value ?? userProfile.waist;
+  const startWaist = progress.waist?.[0]?.value ?? userProfile.waist;
+  const targetWaist = 80; // from goal card
 
-  const bmi = userProfile.height && userProfile.weight
-    ? (userProfile.weight / Math.pow(userProfile.height / 100, 2)).toFixed(1)
-    : '—';
+  // Waist progress 0–1 toward target
+  const waistProgress = startWaist && currentWaist && startWaist > targetWaist
+    ? Math.min(1, Math.max(0, (startWaist - currentWaist) / (startWaist - targetWaist)))
+    : 0;
 
-  const weekActivity = getLast7DayActivity(progress.completedWorkouts);
-  const hasWeightProgress = weightDelta !== null;
-  const goalIsWeight = userProfile.goals?.some(g =>
-    typeof g === 'string' && (g.toLowerCase().includes('weight') || g.toLowerCase().includes('loss') || g.toLowerCase().includes('fat'))
-  );
+  const { done: weekDone, total: weekTotal } = getWeekStats(generatedPlan, progress.completedWorkouts);
+  const weekLeft = Math.max(0, weekTotal - weekDone);
+  const weekActivity = getWeekActivity(progress.completedWorkouts);
+
+  const contextLine = getContextLine(todayWorkout);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <View style={s.header}>
-          <View>
-            <Text style={s.greeting}>{getGreeting()},</Text>
-            <Text style={s.name}>{userProfile.name || 'Athlete'} 👊</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.greeting}>{getGreeting()}</Text>
+            <Text style={s.name}>{userProfile.name || 'Athlete'}</Text>
+            <Text style={s.contextLine}>{contextLine}</Text>
           </View>
           <TouchableOpacity style={s.settingsBtn} onPress={() => navigation.navigate('Settings')}>
-            <Ionicons name="settings-sharp" size={22} color={colors.textSec} />
+            <Ionicons name="settings-sharp" size={20} color={colors.textSec} />
           </TouchableOpacity>
         </View>
 
-        {/* ── Today's Session – #1 CTA ── */}
-        <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('Workout')} style={{ marginHorizontal: 16 }}>
-          {!todayWorkout || todayWorkout.isRest ? (
-            <View style={s.restCard}>
-              <View style={s.restCardInner}>
-                <Text style={s.restLabel}>{todayWorkout?.dayName ?? DAYS[new Date().getDay()]}</Text>
-                <Text style={s.restTitle}>Rest Day 😴</Text>
-                <Text style={s.restSub}>Recovery is where the gains happen</Text>
+        {/* ── Hero stats card (blue) ── */}
+        <View style={s.heroCard}>
+          {/* Primary metric – waist */}
+          <View style={s.heroTopRow}>
+            <View>
+              <Text style={s.heroLabel}>Waist</Text>
+              <View style={s.heroValueRow}>
+                <Text style={s.heroNumber}>{currentWaist ?? '—'}</Text>
+                <Text style={s.heroUnit}>cm</Text>
               </View>
-              <Ionicons name="moon-outline" size={40} color={colors.accentLight} style={{ opacity: 0.4 }} />
+              <Text style={s.heroGoal}>goal is {targetWaist} cm</Text>
+            </View>
+            <View style={s.weekBlock}>
+              <Text style={s.weekLabel}>This week</Text>
+              <Text style={s.weekCount}>
+                {weekDone} done{weekLeft > 0 ? `, ${weekLeft} to go` : ' — nailed it'}
+              </Text>
+              {/* Rounded-square week tracker */}
+              <View style={s.weekDots}>
+                {weekActivity.map((d, i) => (
+                  <View key={i} style={[
+                    s.weekSquare,
+                    d.active && s.weekSquareActive,
+                    d.isToday && !d.active && s.weekSquareToday,
+                    d.isFuture && s.weekSquareFuture,
+                  ]}>
+                    <Text style={[
+                      s.weekSquareLabel,
+                      d.active && s.weekSquareLabelActive,
+                    ]}>{d.dayLetter}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          {/* Journey progress bar */}
+          <View style={s.journeyWrap}>
+            <View style={s.journeyRow}>
+              <Text style={s.journeyLabel}>Start {startWaist ?? '—'} cm</Text>
+              <Text style={s.journeyLabel}>Target {targetWaist} cm</Text>
+            </View>
+            <View style={s.journeyTrack}>
+              <View style={[s.journeyFill, { width: `${waistProgress * 100}%` }]} />
+              {waistProgress > 0 && waistProgress < 1 && (
+                <View style={[s.journeyDot, { left: `${waistProgress * 100}%` }]} />
+              )}
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={s.heroDivider} />
+
+          {/* Secondary stats row */}
+          <View style={s.heroSecRow}>
+            <HeroStat label="Weight" value={currentWeight ?? '—'} unit="kg" />
+            <View style={s.heroStatDivider} />
+            <HeroStat
+              label="Change"
+              value={weightDelta !== null ? `${parseFloat(weightDelta) > 0 ? '+' : ''}${weightDelta}` : '—'}
+              unit={weightDelta !== null ? 'kg' : ''}
+              positive={weightDelta !== null && parseFloat(weightDelta) <= 0}
+            />
+            <View style={s.heroStatDivider} />
+            <HeroStat label="Sessions" value={`${totalWorkouts}`} unit="" />
+          </View>
+        </View>
+
+        {/* ── Today's workout CTA ── */}
+        <View style={s.ctaCard}>
+          <Text style={s.ctaEyebrow}>Up next for you today</Text>
+          {!todayWorkout || todayWorkout.isRest ? (
+            <View style={s.ctaRestRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.ctaTitle}>Rest day 😴</Text>
+                <Text style={s.ctaSub}>Recovery is where the gains happen</Text>
+              </View>
+              <Ionicons name="moon-outline" size={36} color={colors.textMuted} />
             </View>
           ) : (
-            <LinearGradient
-              colors={[todayWorkout.color + 'DD', todayWorkout.color + 'AA']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={s.workoutCard}
-            >
-              {/* CTA label badge */}
-              <View style={s.ctaBadge}>
-                <Text style={s.ctaBadgeText}>START TODAY</Text>
+            <>
+              <Text style={s.ctaTitle}>{todayWorkout.name}</Text>
+              <Text style={s.ctaSub}>{todayWorkout.focus}</Text>
+              <View style={s.ctaMeta}>
+                <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+                <Text style={s.ctaMetaTxt}>{todayWorkout.duration}</Text>
+                <Text style={s.ctaMetaDot}>·</Text>
+                <Text style={s.ctaMetaTxt}>{todayWorkout.exercises?.length ?? 0} exercises</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.workoutDay}>{todayWorkout.dayName}</Text>
-                <Text style={s.workoutName}>{todayWorkout.name}</Text>
-                <Text style={s.workoutFocus}>{todayWorkout.focus}</Text>
-                <View style={s.workoutMeta}>
-                  <Ionicons name="time-outline" size={13} color="rgba(255,255,255,0.75)" />
-                  <Text style={s.workoutMetaTxt}>{todayWorkout.duration}</Text>
-                  <Ionicons name="barbell-outline" size={13} color="rgba(255,255,255,0.75)" style={{ marginLeft: 10 }} />
-                  <Text style={s.workoutMetaTxt}>{todayWorkout.exercises?.length ?? 0} exercises</Text>
-                </View>
-              </View>
-              <View style={s.workoutChevron}>
-                <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-              </View>
-            </LinearGradient>
+            </>
           )}
-        </TouchableOpacity>
-
-        {/* ── Stats – hero + secondary ── */}
-        <View style={s.statsWrap}>
-          {/* Hero metric */}
-          <View style={s.heroCard}>
-            <View style={s.heroTop}>
-              <Ionicons
-                name={goalIsWeight || hasWeightProgress ? 'trending-down-outline' : 'barbell-outline'}
-                size={18} color={colors.accent}
-              />
-              <Text style={s.heroLabel}>
-                {goalIsWeight || hasWeightProgress ? 'Weight' : 'Sessions'}
-              </Text>
-            </View>
-            <Text style={s.heroValue}>
-              {goalIsWeight || hasWeightProgress
-                ? (currentWeight != null ? `${currentWeight}` : '—')
-                : `${totalWorkouts}`}
-              <Text style={s.heroUnit}>
-                {goalIsWeight || hasWeightProgress ? ' kg' : ''}
-              </Text>
+          <TouchableOpacity
+            style={[s.beginBtn, todayWorkout?.isRest && s.beginBtnRest]}
+            onPress={() => navigation.navigate('Workouts')}
+            activeOpacity={0.85}
+          >
+            <Text style={s.beginBtnText}>
+              {todayWorkout?.isRest ? 'View posture routine' : 'Begin'}
             </Text>
-            {hasWeightProgress && (
-              <View style={s.deltaBadge}>
-                <Text style={[s.deltaText, { color: parseFloat(weightDelta) <= 0 ? colors.success : colors.warning }]}>
-                  {parseFloat(weightDelta) > 0 ? '+' : ''}{weightDelta} kg from start
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Secondary metrics */}
-          <View style={s.secondaryCol}>
-            <SecondaryCard icon="body-outline" label="Waist" value={currentWaist ?? '—'} unit={currentWaist ? 'cm' : ''} />
-            <SecondaryCard icon="fitness-outline" label="BMI" value={bmi} unit="" />
-            <SecondaryCard icon="barbell-outline" label="Sessions" value={`${totalWorkouts}`} unit="" />
-          </View>
+            <Ionicons name="arrow-forward" size={16} color="#fff" />
+          </TouchableOpacity>
         </View>
 
-        {/* ── 7-day activity sparkline ── */}
-        <View style={s.sparkWrap}>
-          <Text style={s.sparkTitle}>Last 7 Days</Text>
-          <View style={s.sparkBars}>
-            {weekActivity.map((active, i) => {
-              const dayLetter = ['S','M','T','W','T','F','S'][(new Date().getDay() - 6 + i + 7) % 7];
-              const isToday = i === 6;
-              return (
-                <View key={i} style={s.sparkCol}>
-                  <View style={[
-                    s.sparkBar,
-                    active ? s.sparkBarActive : s.sparkBarInactive,
-                    isToday && s.sparkBarToday,
-                  ]} />
-                  <Text style={[s.sparkDay, isToday && { color: colors.accent }]}>{dayLetter}</Text>
-                </View>
-              );
-            })}
-          </View>
-          <Text style={s.sparkSub}>
-            {weekActivity.filter(Boolean).length}/7 active days this week
-          </Text>
-        </View>
-
-        {/* ── Compact Quick Actions ── */}
-        <View style={s.quickRow}>
-          <QuickAction icon="chatbubble-ellipses" label="AI Coach" color={colors.accent}
-            onPress={() => navigation.navigate('Coach')} />
-          <QuickAction icon="camera" label="Scan" color={colors.secondary}
-            onPress={() => navigation.navigate('Scan')} />
-          <QuickAction icon="stats-chart" label="Progress" color={colors.success}
-            onPress={() => navigation.navigate('Progress')} />
-          <QuickAction icon="body" label="Posture" color={colors.warning}
-            onPress={() => navigation.navigate('Workout', { tab: 'posture' })} />
-        </View>
-
-        {/* Plan chip */}
+        {/* ── Plan chip ── */}
         {generatedPlan && (
           <View style={s.planChip}>
-            <Ionicons name="checkmark-circle" size={13} color={colors.accent} style={{ marginRight: 6 }} />
+            <View style={s.planPip} />
             <Text style={s.planChipText}>
               {Object.values(generatedPlan.schedule).filter(Boolean).length}-day personalised plan active
             </Text>
           </View>
         )}
 
-        {/* Motivation */}
-        <LinearGradient colors={[colors.surface, colors.card]} style={s.quoteCard}>
-          <Ionicons name="flame" size={20} color={colors.warning} style={{ marginBottom: 10 }} />
+        {/* ── Motivation quote ── */}
+        <View style={s.quoteCard}>
+          <Ionicons name="flame" size={18} color={colors.warning} style={{ marginBottom: 8 }} />
           <Text style={s.quoteText}>"{quote.quote}"</Text>
           <Text style={s.quoteAuthor}>— {quote.author}</Text>
-        </LinearGradient>
+        </View>
 
         <View style={{ height: 28 }} />
       </ScrollView>
@@ -220,171 +252,311 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-function SecondaryCard({ icon, label, value, unit }) {
+function HeroStat({ label, value, unit, positive }) {
   return (
-    <View style={sc.card}>
-      <Ionicons name={icon} size={13} color={colors.textMuted} />
-      <Text style={sc.value}>{value}<Text style={sc.unit}>{unit}</Text></Text>
-      <Text style={sc.label}>{label}</Text>
+    <View style={hs.wrap}>
+      <Text style={hs.value}>
+        {value}
+        {unit ? <Text style={hs.unit}> {unit}</Text> : null}
+      </Text>
+      <Text style={hs.label}>{label}</Text>
     </View>
   );
 }
 
-function QuickAction({ icon, label, color, onPress }) {
-  return (
-    <TouchableOpacity style={qa.wrap} onPress={onPress} activeOpacity={0.7}>
-      <View style={[qa.icon, { backgroundColor: color + '20', borderColor: color + '40' }]}>
-        <Ionicons name={icon} size={20} color={color} />
-      </View>
-      <Text style={qa.label}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
+/* ─── Styles ─────────────────────────────────────────────────────── */
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
+
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 18,
+    paddingBottom: 14,
   },
-  greeting: { fontSize: 13, color: colors.textSec, fontWeight: '400' },
-  name: { fontSize: 26, color: colors.text, fontWeight: '700', marginTop: 2 },
+  greeting: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 13,
+    color: colors.textSec,
+  },
+  name: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 36,
+    color: colors.text,
+    letterSpacing: 1,
+    marginTop: 1,
+  },
+  contextLine: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 13,
+    color: colors.textSec,
+    marginTop: 2,
+  },
   settingsBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.surface,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border,
+    marginTop: 2,
   },
 
-  // Today CTA - rest variant
-  restCard: {
-    backgroundColor: colors.card,
-    borderRadius: 20, padding: 20,
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border,
-  },
-  restCardInner: { flex: 1 },
-  restLabel: { fontSize: 11, color: colors.textSec, fontWeight: '500', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.8 },
-  restTitle: { fontSize: 22, color: colors.text, fontWeight: '700', marginBottom: 4 },
-  restSub: { fontSize: 13, color: colors.textSec },
-
-  // Today CTA - active workout variant
-  workoutCard: {
-    borderRadius: 20, padding: 20,
-    flexDirection: 'row', alignItems: 'center',
-    minHeight: 120,
-  },
-  ctaBadge: {
-    position: 'absolute', top: 14, right: 14,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
-  },
-  ctaBadgeText: { fontSize: 9, color: '#fff', fontWeight: '700', letterSpacing: 1 },
-  workoutDay: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '500', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.8 },
-  workoutName: { fontSize: 22, color: '#fff', fontWeight: '700', marginBottom: 4 },
-  workoutFocus: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginBottom: 10 },
-  workoutMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  workoutMetaTxt: { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
-  workoutChevron: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  // Stats
-  statsWrap: {
-    flexDirection: 'row', marginHorizontal: 16, marginTop: 14, gap: 10,
-  },
+  // Hero card
   heroCard: {
-    flex: 3, backgroundColor: colors.cardElevated,
-    borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: colors.accent + '35',
+    marginHorizontal: 20,
+    backgroundColor: colors.heroCard,
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.heroCardBorder,
   },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  heroLabel: { fontSize: 12, color: colors.textSec, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  heroValue: { fontSize: 36, color: colors.text, fontWeight: '800', lineHeight: 40 },
-  heroUnit: { fontSize: 16, color: colors.textSec, fontWeight: '400' },
-  deltaBadge: {
-    marginTop: 8, backgroundColor: colors.bg,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
-    alignSelf: 'flex-start',
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  deltaText: { fontSize: 11, fontWeight: '600' },
-  secondaryCol: { flex: 2, gap: 8 },
+  heroLabel: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 12,
+    color: colors.heroTextMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  heroValueRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  heroNumber: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 56,
+    color: colors.heroText,
+    lineHeight: 58,
+  },
+  heroUnit: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 18,
+    color: colors.heroTextSec,
+    marginBottom: 8,
+  },
+  heroGoal: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 12,
+    color: colors.heroTextMuted,
+    marginTop: 2,
+  },
 
-  // Sparkline
-  sparkWrap: {
-    marginHorizontal: 16, marginTop: 14,
-    backgroundColor: colors.card,
-    borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: colors.border,
+  weekBlock: { alignItems: 'flex-end' },
+  weekLabel: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 11,
+    color: colors.heroTextMuted,
+    marginBottom: 3,
   },
-  sparkTitle: { fontSize: 12, color: colors.textSec, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
-  sparkBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 40 },
-  sparkCol: { flex: 1, alignItems: 'center', gap: 4 },
-  sparkBar: { width: '100%', borderRadius: 4 },
-  sparkBarActive: { height: 36, backgroundColor: colors.accent + 'CC' },
-  sparkBarInactive: { height: 12, backgroundColor: colors.border },
-  sparkBarToday: { borderWidth: 1, borderColor: colors.accent },
-  sparkDay: { fontSize: 9, color: colors.textMuted, fontWeight: '600' },
-  sparkSub: { fontSize: 11, color: colors.textMuted, marginTop: 8 },
+  weekCount: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 12,
+    color: colors.heroTextSec,
+    marginBottom: 8,
+  },
+  weekDots: { flexDirection: 'row', gap: 5 },
+  weekSquare: {
+    width: 24, height: 24, borderRadius: 7,
+    backgroundColor: colors.heroCardDeep,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  weekSquareActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  weekSquareToday: {
+    borderColor: colors.heroTextSec,
+    borderWidth: 1.5,
+  },
+  weekSquareFuture: {
+    opacity: 0.4,
+  },
+  weekSquareLabel: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 8,
+    color: colors.heroTextMuted,
+  },
+  weekSquareLabelActive: { color: '#fff' },
 
-  // Compact Quick Actions
-  quickRow: {
-    flexDirection: 'row', marginHorizontal: 16, marginTop: 14, gap: 8,
+  journeyWrap: { marginBottom: 14 },
+  journeyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  journeyLabel: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 10,
+    color: colors.heroTextMuted,
+  },
+  journeyTrack: {
+    height: 5, backgroundColor: colors.heroCardDeep,
+    borderRadius: 3, overflow: 'visible', position: 'relative',
+  },
+  journeyFill: {
+    height: '100%',
+    backgroundColor: '#ff7848',
+    borderRadius: 3,
+  },
+  journeyDot: {
+    position: 'absolute',
+    top: -4,
+    width: 13, height: 13,
+    borderRadius: 7,
+    backgroundColor: '#ff7848',
+    borderWidth: 2,
+    borderColor: colors.heroCard,
+    marginLeft: -6,
   },
 
-  // Plan chip
+  heroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 12,
+  },
+  heroSecRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroStatDivider: {
+    width: 1, height: 28,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginHorizontal: 2,
+  },
+
+  // CTA card
+  ctaCard: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    backgroundColor: colors.ctaCard,
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  ctaEyebrow: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: 8,
+  },
+  ctaRestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  ctaTitle: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 30,
+    color: colors.text,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  ctaSub: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 13,
+    color: colors.textSec,
+    marginBottom: 10,
+  },
+  ctaMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 14,
+  },
+  ctaMetaTxt: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  ctaMetaDot: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  beginBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 14,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  beginBtnRest: {
+    backgroundColor: colors.surface,
+  },
+  beginBtnText: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 15,
+    color: '#fff',
+  },
+
   planChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginTop: 12,
-    backgroundColor: colors.accent + '12',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: colors.accent + '25',
+    gap: 8,
   },
-  planChipText: { fontSize: 12, color: colors.textSec },
+  planPip: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: colors.accent,
+  },
+  planChipText: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 12,
+    color: colors.textMuted,
+  },
 
-  // Quote
   quoteCard: {
-    margin: 16, marginTop: 14, borderRadius: 18, padding: 20,
-    alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+    marginHorizontal: 20,
+    marginTop: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   quoteText: {
-    fontSize: 14, color: colors.text, fontStyle: 'italic',
-    textAlign: 'center', lineHeight: 22, fontWeight: '500',
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 14,
+    color: colors.textSec,
+    textAlign: 'center',
+    lineHeight: 22,
   },
-  quoteAuthor: { fontSize: 12, color: colors.textSec, marginTop: 8, fontWeight: '500' },
+  quoteAuthor: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 8,
+  },
 });
 
-const sc = StyleSheet.create({
-  card: {
-    flex: 1, backgroundColor: colors.card,
-    borderRadius: 12, padding: 10,
-    alignItems: 'flex-start', justifyContent: 'center',
-    borderWidth: 1, borderColor: colors.border,
-    gap: 2,
-  },
-  value: { fontSize: 16, color: colors.text, fontWeight: '700' },
-  unit: { fontSize: 10, color: colors.textSec, fontWeight: '400' },
-  label: { fontSize: 10, color: colors.textMuted },
-});
-
-const qa = StyleSheet.create({
+const hs = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center' },
-  icon: {
-    width: 48, height: 48, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 5, borderWidth: 1,
+  value: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 22,
+    color: colors.heroText,
+    letterSpacing: 0.5,
   },
-  label: { fontSize: 10, color: colors.textSec, textAlign: 'center', fontWeight: '600' },
+  unit: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 13,
+    color: colors.heroTextSec,
+  },
+  label: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 10,
+    color: colors.heroTextMuted,
+    marginTop: 2,
+  },
 });
