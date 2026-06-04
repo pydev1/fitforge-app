@@ -1,37 +1,29 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  TextInput,
-  Alert,
-  Dimensions,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Modal, TextInput, Alert, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
-import { fromLocalDateKey, toLocalDateKey } from '../utils/date';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 40;
 
 const CHART_CONFIG = {
-  backgroundGradientFrom: colors.card,
-  backgroundGradientTo: colors.card,
+  backgroundGradientFrom: colors.surface,
+  backgroundGradientTo: colors.surface,
   backgroundGradientFromOpacity: 1,
   backgroundGradientToOpacity: 1,
-  color: (opacity = 1) => `rgba(255, 107, 53, ${opacity})`,
+  color: (opacity = 1) => `rgba(40, 120, 216, ${opacity})`,
   labelColor: () => colors.textMuted,
   strokeWidth: 2.5,
   propsForDots: {
     r: '4',
     strokeWidth: '2',
-    stroke: colors.accentLight,
+    stroke: '#2878d8',
     fill: colors.bg,
   },
   propsForBackgroundLines: {
@@ -57,44 +49,52 @@ function getStreak(completedWorkouts) {
   let cursor = new Date();
   cursor.setHours(0, 0, 0, 0);
   for (const w of sorted) {
-    const d = fromLocalDateKey(w.date);
+    const d = new Date(w.date);
     const diff = Math.round((cursor - d) / 86400000);
-    if (diff <= 1) {
-      streak++;
-      cursor = d;
-    } else {
-      break;
-    }
+    if (diff <= 1) { streak++; cursor = d; }
+    else break;
   }
   return streak;
 }
 
-function prettyGoal(goal) {
-  return String(goal || 'general_fitness')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+function getMostRecentPR(setLogs) {
+  if (!setLogs.length) return null;
+  const byExercise = {};
+  setLogs.forEach(log => {
+    if (!byExercise[log.exerciseId]) byExercise[log.exerciseId] = { name: log.exerciseName, logs: [] };
+    byExercise[log.exerciseId].logs.push(log);
+  });
+  let bestEntry = null;
+  Object.values(byExercise).forEach(({ name, logs }) => {
+    const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
+    sorted.forEach((log, i) => {
+      if (i === 0) return;
+      const prevBest = Math.max(...sorted.slice(0, i).map(l => l.weight));
+      if (log.weight > prevBest) {
+        if (!bestEntry || log.date > bestEntry.date) {
+          bestEntry = { name, weight: log.weight, date: log.date };
+        }
+      }
+    });
+  });
+  return bestEntry;
 }
 
-function buildGoalMessage(userProfile, firstWeight, firstWaist) {
-  const primaryGoal = userProfile.goals?.[0] || 'general_fitness';
-  const startingWeight = firstWeight?.value ?? userProfile.weight;
-  const startingWaist = firstWaist?.value ?? userProfile.waist;
+function formatPRDate(dateStr) {
+  const d = new Date(dateStr);
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[d.getDay()];
+}
 
-  const goalCopy = {
-    lose_fat: 'Lose fat while protecting strength and lean muscle.',
-    build_muscle: 'Build muscle with progressive overload and enough recovery.',
-    recomposition: 'Improve body composition by gaining strength while trimming waist size.',
-    improve_posture: 'Build strength and mobility that supports better posture every day.',
-    endurance: 'Build work capacity with consistent sessions and controlled recovery.',
-    general_fitness: 'Build a repeatable training habit and improve your baseline fitness.',
-  }[primaryGoal] || 'Build a repeatable training habit and improve your baseline fitness.';
-
-  const metrics = [
-    startingWeight ? `Starting weight: ${startingWeight}kg` : null,
-    startingWaist ? `Starting waist: ${startingWaist}cm` : null,
-  ].filter(Boolean).join(' · ');
-
-  return `${prettyGoal(primaryGoal)}: ${goalCopy}\n${metrics || 'Log your first measurements to set a baseline.'}\nTrack trends over weeks, not single-day swings.`;
+// Get muscle group label for a workout type
+function getMuscleGroups(type) {
+  const map = {
+    push: 'chest & shoulders',
+    pull: 'back & biceps',
+    legs_core: 'legs & core',
+    posture: 'posture & mobility',
+  };
+  return map[type] || type;
 }
 
 export default function ProgressScreen() {
@@ -104,6 +104,7 @@ export default function ProgressScreen() {
   const [weightInput, setWeightInput] = useState('');
   const [waistInput, setWaistInput] = useState('');
 
+  const setLogs = progress.setLogs || [];
   const streak = getStreak(progress.completedWorkouts);
   const totalWorkouts = progress.completedWorkouts.length;
   const lastWeight = progress.weight[progress.weight.length - 1];
@@ -116,17 +117,23 @@ export default function ProgressScreen() {
   const waistDelta = lastWaist && firstWaist
     ? (lastWaist.value - firstWaist.value).toFixed(1)
     : null;
+  const targetWaist = 80;
 
-  const weightChartData = progress.weight.length >= 2
-    ? buildChartData(progress.weight)
+  const weightChartData = progress.weight.length >= 2 ? buildChartData(progress.weight) : null;
+  const waistChartData = progress.waist.length >= 2 ? buildChartData(progress.waist, 6) : null;
+
+  const recentPR = getMostRecentPR(setLogs);
+
+  // Rough week number based on first workout date
+  const firstDate = progress.completedWorkouts.length
+    ? new Date(progress.completedWorkouts[0].date)
     : null;
-  const waistChartData = progress.waist.length >= 2
-    ? buildChartData(progress.waist, 6)
+  const weekNum = firstDate
+    ? Math.max(1, Math.ceil((Date.now() - firstDate.getTime()) / (7 * 86400000)))
     : null;
-  const goalMessage = buildGoalMessage(userProfile, firstWeight, firstWaist);
 
   function saveLog() {
-    const today = toLocalDateKey();
+    const today = new Date().toISOString().split('T')[0];
     if (weightInput) {
       const val = parseFloat(weightInput);
       if (isNaN(val) || val < 30 || val > 300) {
@@ -143,9 +150,7 @@ export default function ProgressScreen() {
       }
       dispatch({ type: 'LOG_WAIST', payload: { date: today, value: val } });
     }
-    if (weightInput || waistInput) {
-      Alert.alert('Logged! 📊', 'Your measurements have been saved.');
-    }
+    if (weightInput || waistInput) Alert.alert('Logged 📊', 'Your measurements have been saved.');
     setWeightInput('');
     setWaistInput('');
     setLogModal(false);
@@ -156,59 +161,72 @@ export default function ProgressScreen() {
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={s.header}>
-          <View>
-            <Text style={s.title}>Progress</Text>
-            <Text style={s.subtitle}>Track your transformation</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.title}>How you're doing</Text>
+            {weekNum && (
+              <Text style={s.subtitle}>
+                Week {weekNum} of 12 — building the habit. Numbers will follow.
+              </Text>
+            )}
           </View>
           <TouchableOpacity style={s.logBtn} onPress={() => setLogModal(true)}>
-            <Ionicons name="add" size={20} color={colors.white} />
+            <Ionicons name="add" size={18} color={colors.white} />
             <Text style={s.logBtnText}>Log</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Summary Cards */}
-        <View style={s.summaryRow}>
-          <SummaryCard
-            icon="flame"
-            iconColor={colors.warning}
-            label="Streak"
-            value={`${streak}`}
-            unit="days"
-          />
-          <SummaryCard
-            icon="barbell-outline"
-            iconColor={colors.accentLight}
-            label="Sessions"
-            value={`${totalWorkouts}`}
-            unit="total"
-          />
-          {weightDelta !== null && (
-            <SummaryCard
-              icon="scale-outline"
-              iconColor={parseFloat(weightDelta) <= 0 ? colors.success : colors.warning}
-              label="Weight"
-              value={`${parseFloat(weightDelta) > 0 ? '+' : ''}${weightDelta}`}
-              unit="kg"
-            />
-          )}
-          {waistDelta !== null && (
-            <SummaryCard
-              icon="body-outline"
-              iconColor={parseFloat(waistDelta) <= 0 ? colors.success : colors.warning}
-              label="Waist"
-              value={`${parseFloat(waistDelta) > 0 ? '+' : ''}${waistDelta}`}
-              unit="cm"
-            />
-          )}
+        {/* Stat cards row — 3 cards */}
+        <View style={s.statRow}>
+          {/* First card: waist — bright blue */}
+          <View style={[s.statCard, s.statCardBlue]}>
+            <Text style={s.statCardValueBlue}>
+              {lastWaist?.value ?? userProfile.waist ?? '—'}
+              <Text style={s.statCardUnitBlue}> cm</Text>
+            </Text>
+            <Text style={s.statCardLabelBlue}>Waist</Text>
+            <Text style={s.statCardGoalBlue}>goal is {targetWaist} cm</Text>
+          </View>
+
+          {/* Second: streak */}
+          <View style={s.statCard}>
+            <Ionicons name="flame" size={16} color={colors.warning} style={{ marginBottom: 4 }} />
+            <Text style={s.statCardValue}>{streak}<Text style={s.statCardUnit}> days</Text></Text>
+            <Text style={s.statCardLabel}>Streak</Text>
+          </View>
+
+          {/* Third: sessions */}
+          <View style={s.statCard}>
+            <Ionicons name="barbell-outline" size={16} color={colors.textSec} style={{ marginBottom: 4 }} />
+            <Text style={s.statCardValue}>{totalWorkouts}</Text>
+            <Text style={s.statCardLabel}>Sessions</Text>
+          </View>
         </View>
 
-        {/* Weight Chart */}
+        {/* PR achievement card */}
+        {recentPR && (
+          <View style={s.prCard}>
+            <View style={s.prIconWrap}>
+              <Ionicons name="trophy" size={20} color="#b8dcf8" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.prTitle}>You hit a PR on {formatPRDate(recentPR.date)}</Text>
+              <Text style={s.prSub}>{recentPR.name} · {recentPR.weight} kg</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Weight chart */}
         <View style={s.chartCard}>
           <View style={s.chartHeader}>
-            <Text style={s.chartTitle}>Weight (kg)</Text>
-            {lastWeight && (
-              <Text style={s.chartCurrent}>{lastWeight.value} kg now</Text>
-            )}
+            <View style={{ flex: 1 }}>
+              <Text style={s.chartTitle}>Your weight is moving</Text>
+              {weightDelta !== null && (
+                <Text style={s.chartSub}>
+                  {parseFloat(weightDelta) < 0 ? 'Down' : 'Up'} {Math.abs(parseFloat(weightDelta))} kg since you started
+                </Text>
+              )}
+            </View>
+            {lastWeight && <Text style={s.chartCurrent}>{lastWeight.value} kg</Text>}
           </View>
           {weightChartData ? (
             <LineChart
@@ -218,26 +236,26 @@ export default function ProgressScreen() {
               chartConfig={CHART_CONFIG}
               bezier
               style={s.chart}
-              withInnerLines={true}
+              withInnerLines
               withOuterLines={false}
             />
           ) : (
-            <EmptyChart
-              icon="scale-outline"
-              message={progress.weight.length === 0 ? "No weight logged yet" : "Log one more entry to see your trend"}
-              actionLabel={progress.weight.length === 0 ? "Log first weight" : undefined}
-              onAction={progress.weight.length === 0 ? () => setLogModal(true) : undefined}
-            />
+            <EmptyChart message="Log 2 or more weight entries to see your chart" />
           )}
         </View>
 
-        {/* Waist Chart */}
+        {/* Waist chart */}
         <View style={s.chartCard}>
           <View style={s.chartHeader}>
-            <Text style={s.chartTitle}>Waist (cm)</Text>
-            {lastWaist && (
-              <Text style={s.chartCurrent}>{lastWaist.value} cm now</Text>
-            )}
+            <View style={{ flex: 1 }}>
+              <Text style={s.chartTitle}>Waist is the real signal</Text>
+              {waistDelta !== null && (
+                <Text style={s.chartSub}>
+                  {parseFloat(waistDelta) < 0 ? 'Down' : 'Up'} {Math.abs(parseFloat(waistDelta))} cm — target is {targetWaist} cm
+                </Text>
+              )}
+            </View>
+            {lastWaist && <Text style={s.chartCurrent}>{lastWaist.value} cm</Text>}
           </View>
           {waistChartData ? (
             <LineChart
@@ -246,33 +264,25 @@ export default function ProgressScreen() {
               height={160}
               chartConfig={{
                 ...CHART_CONFIG,
-                color: (opacity = 1) => `rgba(244, 63, 94, ${opacity})`,
-                propsForDots: {
-                  ...CHART_CONFIG.propsForDots,
-                  stroke: colors.secondary,
-                },
+                color: (opacity = 1) => `rgba(255, 87, 34, ${opacity})`,
+                propsForDots: { ...CHART_CONFIG.propsForDots, stroke: colors.accent },
               }}
               bezier
               style={s.chart}
-              withInnerLines={true}
+              withInnerLines
               withOuterLines={false}
             />
           ) : (
-            <EmptyChart
-              icon="body-outline"
-              message={progress.waist.length === 0 ? "No waist logged yet" : "Log one more entry to see your trend"}
-              actionLabel={progress.waist.length === 0 ? "Log first measurement" : undefined}
-              onAction={progress.waist.length === 0 ? () => setLogModal(true) : undefined}
-            />
+            <EmptyChart message="Log 2 or more waist entries to see your chart" />
           )}
         </View>
 
-        {/* Strength Progress */}
-        <StrengthProgress setLogs={progress.setLogs || []} />
+        {/* Strength — volume trending up */}
+        <StrengthProgress setLogs={setLogs} />
 
-        {/* Recent Workouts */}
-        <View style={s.recentCard}>
-          <Text style={s.chartTitle}>Recent Sessions</Text>
+        {/* Recent sessions */}
+        <View style={s.chartCard}>
+          <Text style={s.chartTitle}>Recent sessions</Text>
           {progress.completedWorkouts.length === 0 ? (
             <Text style={s.emptyText}>No sessions logged yet. Complete a workout to see it here.</Text>
           ) : (
@@ -282,29 +292,36 @@ export default function ProgressScreen() {
               .map((w, i) => (
                 <View key={`${w.date}-${i}`} style={s.workoutRow}>
                   <View style={[s.workoutDot, { backgroundColor: WORKOUT_COLORS[w.type] || colors.border }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.workoutType}>{WORKOUT_LABELS[w.type] || w.type}</Text>
+                    <Text style={s.workoutMuscles}>{getMuscleGroups(w.type)}</Text>
+                  </View>
                   <Text style={s.workoutDate}>{w.date}</Text>
-                  <Text style={s.workoutType}>{WORKOUT_LABELS[w.type] || w.type}</Text>
                 </View>
               ))
           )}
         </View>
 
-        {/* Goal Reminder */}
+        {/* Goal reminder */}
         <View style={s.goalCard}>
-          <Ionicons name="trophy-outline" size={20} color={colors.warning} style={{ marginBottom: 8 }} />
-          <Text style={s.goalTitle}>Your Goal</Text>
-          <Text style={s.goalText}>{goalMessage}</Text>
+          <Ionicons name="trophy-outline" size={18} color={colors.warning} style={{ marginBottom: 8 }} />
+          <Text style={s.goalTitle}>What you're working toward</Text>
+          <Text style={s.goalText}>
+            Body recomposition: lose belly fat while gaining lean muscle.{'\n'}
+            Starting waist: {firstWaist?.value ?? userProfile.waist} cm → under {targetWaist} cm.{'\n'}
+            Stay consistent — recomp takes 3–6 months to show clearly.
+          </Text>
         </View>
 
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Log Modal */}
+      {/* Log modal */}
       <Modal visible={logModal} transparent animationType="slide">
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Update your numbers</Text>
+              <Text style={s.modalTitle}>Log today's stats</Text>
               <TouchableOpacity onPress={() => setLogModal(false)}>
                 <Ionicons name="close" size={22} color={colors.textSec} />
               </TouchableOpacity>
@@ -328,7 +345,7 @@ export default function ProgressScreen() {
               placeholderTextColor={colors.textMuted}
             />
             <TouchableOpacity style={s.saveBtn} onPress={saveLog}>
-              <Text style={s.saveBtnText}>Save</Text>
+              <Text style={s.saveBtnText}>Save entry</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -341,81 +358,42 @@ function StrengthProgress({ setLogs }) {
   if (!setLogs.length) {
     return (
       <View style={s.chartCard}>
-        <Text style={s.chartTitle}>Strength Progress</Text>
-        <EmptyChart icon="barbell-outline" message="Complete workouts and log sets to track your strength gains" />
+        <Text style={s.chartTitle}>Volume is trending up</Text>
+        <EmptyChart message="Log sets during workouts to track your strength gains" />
       </View>
     );
   }
-
   const byExercise = {};
   setLogs.forEach(log => {
-    if (!byExercise[log.exerciseId]) {
-      byExercise[log.exerciseId] = { name: log.exerciseName, logs: [] };
-    }
+    if (!byExercise[log.exerciseId]) byExercise[log.exerciseId] = { name: log.exerciseName, logs: [] };
     byExercise[log.exerciseId].logs.push(log);
   });
-
   const exercises = Object.entries(byExercise)
     .sort(([, a], [, b]) => b.logs.length - a.logs.length)
     .slice(0, 6);
 
   return (
     <View style={s.chartCard}>
-      <View style={s.chartHeader}>
-        <Text style={s.chartTitle}>Strength Progress</Text>
-        <Text style={s.chartCurrent}>{exercises.length} exercises</Text>
-      </View>
+      <Text style={s.chartTitle}>Volume is trending up</Text>
+      <Text style={s.chartSub}>Your top lifts over time</Text>
       {exercises.map(([exId, { name, logs }], i) => {
         const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
+        const first = sorted[0].weight;
+        const last = sorted[sorted.length - 1].weight;
         const best = Math.max(...logs.map(l => l.weight));
-        const firstW = sorted[0].weight;
-
-        const sessions = [...new Set(sorted.map(l => l.date))].sort();
-        const lastSessionLogs = sorted.filter(l => l.date === sessions[sessions.length - 1]);
-        const prevSessionLogs = sessions.length > 1 ? sorted.filter(l => l.date === sessions[sessions.length - 2]) : [];
-        const lastBest = Math.max(...lastSessionLogs.map(l => l.weight));
-        const prevBest = prevSessionLogs.length ? Math.max(...prevSessionLogs.map(l => l.weight)) : null;
-
-        const trend = prevBest !== null ? Math.round((lastBest - prevBest) * 10) / 10 : 0;
-        const isPR = sessions.length > 1 && lastBest >= best;
-        const barPct = best > firstW ? Math.round(((lastBest - firstW) / (best - firstW)) * 100) : 100;
-        const isBodyweight = best === 0;
+        const delta = last - first;
         const isLast = i === exercises.length - 1;
-
         return (
           <View key={exId} style={[sp.row, isLast && { borderBottomWidth: 0 }]}>
-            <View style={sp.rowHeader}>
+            <View style={{ flex: 1 }}>
               <Text style={sp.name} numberOfLines={1}>{name}</Text>
-              <View style={sp.badges}>
-                {isPR && (
-                  <View style={sp.prBadge}>
-                    <Text style={sp.prText}>PR</Text>
-                  </View>
-                )}
-                {trend !== 0 && (
-                  <View style={[sp.trendBadge, { backgroundColor: trend > 0 ? colors.success + '22' : colors.secondary + '22' }]}>
-                    <Ionicons name={trend > 0 ? 'trending-up' : 'trending-down'} size={11} color={trend > 0 ? colors.success : colors.secondary} />
-                    <Text style={[sp.trendText, { color: trend > 0 ? colors.success : colors.secondary }]}>
-                      {trend > 0 ? '+' : ''}{trend}kg
-                    </Text>
-                  </View>
-                )}
-              </View>
+              <Text style={sp.meta}>{logs.length} sets · best {best} kg · last {last} kg</Text>
             </View>
-
-            <Text style={sp.meta}>
-              {logs.length} sets · Best: {isBodyweight ? 'bodyweight' : `${best}kg`} · Last: {isBodyweight ? 'bodyweight' : `${lastBest}kg`}
-            </Text>
-
-            {!isBodyweight && best > 0 && (
-              <View style={sp.barWrap}>
-                <View style={sp.barBg}>
-                  <View style={[sp.barFill, { width: `${Math.max(4, Math.min(100, barPct))}%` }]} />
-                </View>
-                <View style={sp.barLabels}>
-                  <Text style={sp.barLabel}>Start {firstW}kg</Text>
-                  <Text style={sp.barLabel}>Best {best}kg</Text>
-                </View>
+            {delta !== 0 && (
+              <View style={[sp.deltaBadge, { backgroundColor: delta > 0 ? colors.success + '20' : colors.secondary + '20' }]}>
+                <Text style={[sp.deltaText, { color: delta > 0 ? colors.success : colors.secondary }]}>
+                  {delta > 0 ? '+' : ''}{delta} kg
+                </Text>
               </View>
             )}
           </View>
@@ -425,234 +403,145 @@ function StrengthProgress({ setLogs }) {
   );
 }
 
-function SummaryCard({ icon, iconColor, label, value, unit }) {
-  return (
-    <View style={sc.card}>
-      <Ionicons name={icon} size={18} color={iconColor} style={{ marginBottom: 4 }} />
-      <Text style={sc.value}>{value}<Text style={sc.unit}>{unit}</Text></Text>
-      <Text style={sc.label}>{label}</Text>
-    </View>
-  );
-}
-
-function EmptyChart({ icon = 'analytics-outline', message, actionLabel, onAction }) {
+function EmptyChart({ message }) {
   return (
     <View style={s.emptyChart}>
-      <View style={s.ghostGrid} pointerEvents="none">
-        {[0.18, 0.12, 0.07].map((op, i) => (
-          <View key={i} style={[s.ghostRow, { opacity: op }]}>
-            {[1,2,3,4,5].map(j => <View key={j} style={s.ghostDash} />)}
-          </View>
-        ))}
-      </View>
-      <View style={s.emptyChartOverlay}>
-        <View style={s.emptyChartIconWrap}>
-          <Ionicons name={icon} size={26} color={colors.textMuted} />
-        </View>
-        <Text style={s.emptyChartText}>{message}</Text>
-        {actionLabel && onAction && (
-          <TouchableOpacity style={s.emptyChartCta} onPress={onAction}>
-            <Text style={s.emptyChartCtaText}>{actionLabel}</Text>
-            <Ionicons name="arrow-forward-circle-outline" size={14} color={colors.accent} />
-          </TouchableOpacity>
-        )}
-      </View>
+      <Ionicons name="analytics-outline" size={32} color={colors.textMuted} />
+      <Text style={s.emptyChartText}>{message}</Text>
     </View>
   );
 }
 
 const WORKOUT_COLORS = {
-  push:  '#7C3AED',
-  pull:  '#3B82F6',
-  legs:  '#10B981',
-  full:  '#F43F5E',
-  core:  '#F59E0B',
-  upper: '#8B5CF6',
-  lower: '#06B6D4',
+  push: '#2878d8',
+  pull: colors.info,
+  legs_core: colors.success,
   posture: colors.warning,
 };
 
 const WORKOUT_LABELS = {
-  push:  'Push Day',
-  pull:  'Pull Day',
-  legs:  'Legs + Core',
-  full:  'Full Body',
-  core:  'Core Day',
-  upper: 'Upper Body',
-  lower: 'Lower Body',
-  posture: 'Posture Session',
+  push: 'Push day',
+  pull: 'Pull day',
+  legs_core: 'Legs + core',
+  posture: 'Posture session',
 };
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10,
   },
-  title: { fontSize: 28, color: colors.text, fontWeight: '700' },
-  subtitle: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  title: { fontFamily: 'BebasNeue_400Regular', fontSize: 34, color: colors.text, letterSpacing: 0.5 },
+  subtitle: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textSec, marginTop: 3, lineHeight: 19 },
   logBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.accent,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  logBtnText: { fontSize: 13, color: colors.white, fontWeight: '700' },
-  summaryRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
-  },
-  chartCard: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  chartTitle: { fontSize: 15, color: colors.text, fontWeight: '700' },
-  chartCurrent: { fontSize: 12, color: colors.textSec },
-  chart: { borderRadius: 10, marginLeft: -8 },
-  emptyChart: {
-    height: 120,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  ghostGrid: {
-    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-    justifyContent: 'space-evenly', paddingHorizontal: 8,
-  },
-  ghostRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  ghostDash: { height: 1, flex: 1, backgroundColor: colors.border, marginHorizontal: 3, borderRadius: 1 },
-  emptyChartOverlay: { alignItems: 'center', gap: 6 },
-  emptyChartIconWrap: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.cardAlt, alignItems: 'center', justifyContent: 'center',
-  },
-  emptyChartText: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
-  emptyChartCta: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5,
-    backgroundColor: colors.accentDim, borderRadius: 10,
-  },
-  emptyChartCtaText: { fontSize: 11, color: colors.accentLight, fontWeight: '600' },
-  recentCard: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-  },
-  emptyText: { fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
-  workoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: 10,
-  },
-  workoutDot: { width: 8, height: 8, borderRadius: 4 },
-  workoutDate: { fontSize: 12, color: colors.textMuted, width: 80 },
-  workoutType: { fontSize: 13, color: colors.text, fontWeight: '500' },
-  goalCard: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-    alignItems: 'center',
-  },
-  goalTitle: { fontSize: 14, color: colors.text, fontWeight: '700', marginBottom: 8 },
-  goalText: { fontSize: 12, color: colors.textSec, textAlign: 'center', lineHeight: 20 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: { fontSize: 18, color: colors.text, fontWeight: '700' },
-  modalLabel: { fontSize: 13, color: colors.textSec, marginBottom: 6, fontWeight: '500' },
-  modalInput: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  saveBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 4,
     marginTop: 4,
   },
-  saveBtnText: { fontSize: 15, color: colors.white, fontWeight: '700' },
-});
+  logBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.white },
 
-const sc = StyleSheet.create({
-  card: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
+  statRow: {
+    flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 4, gap: 10,
   },
-  value: { fontSize: 16, color: colors.text, fontWeight: '700' },
-  unit: { fontSize: 10, color: colors.textSec, fontWeight: '400' },
-  label: { fontSize: 9, color: colors.textMuted, marginTop: 2 },
+  statCard: {
+    flex: 1, backgroundColor: colors.surface,
+    borderRadius: 18, padding: 14,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border,
+  },
+  statCardBlue: {
+    backgroundColor: colors.statCard,
+    borderColor: colors.statCardBorder,
+  },
+  statCardValueBlue: { fontFamily: 'BebasNeue_400Regular', fontSize: 28, color: '#fff', letterSpacing: 0.5 },
+  statCardUnitBlue: { fontFamily: 'Figtree_500Medium', fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  statCardLabelBlue: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  statCardGoalBlue: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
+  statCardValue: { fontFamily: 'BebasNeue_400Regular', fontSize: 26, color: colors.text, letterSpacing: 0.5 },
+  statCardUnit: { fontFamily: 'Figtree_500Medium', fontSize: 12, color: colors.textSec },
+  statCardLabel: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: colors.textMuted, marginTop: 2 },
+
+  prCard: {
+    marginHorizontal: 20, marginTop: 14,
+    backgroundColor: colors.heroCardDeep || '#0e1e40',
+    borderRadius: 18, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderWidth: 1, borderColor: '#2264c8' + '60',
+  },
+  prIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: 'rgba(40,100,200,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  prTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: '#f0f8ff', marginBottom: 3 },
+  prSub: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: '#b8dcf8' },
+
+  chartCard: {
+    marginHorizontal: 20, marginTop: 14,
+    backgroundColor: colors.surface, borderRadius: 20,
+    padding: 16, borderWidth: 1, borderColor: colors.border,
+  },
+  chartHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12,
+  },
+  chartTitle: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.text, marginBottom: 2 },
+  chartSub: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec },
+  chartCurrent: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.textSec },
+  chart: { borderRadius: 10, marginLeft: -8 },
+  emptyChart: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  emptyChartText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+
+  workoutRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10,
+  },
+  workoutDot: { width: 8, height: 8, borderRadius: 4 },
+  workoutType: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text },
+  workoutMuscles: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textSec, marginTop: 1 },
+  workoutDate: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted },
+  emptyText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
+
+  goalCard: {
+    marginHorizontal: 20, marginTop: 14,
+    backgroundColor: colors.surface, borderRadius: 20,
+    padding: 16, borderWidth: 1, borderColor: colors.border, alignItems: 'center',
+  },
+  goalTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text, marginBottom: 8 },
+  goalText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec, textAlign: 'center', lineHeight: 20 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalCard: {
+    backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, borderTopWidth: 1, borderColor: colors.border,
+  },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20,
+  },
+  modalTitle: { fontFamily: 'BebasNeue_400Regular', fontSize: 24, color: colors.text, letterSpacing: 0.5 },
+  modalLabel: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.textSec, marginBottom: 6 },
+  modalInput: {
+    backgroundColor: colors.surface, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontFamily: 'Figtree_400Regular', fontSize: 15, color: colors.text,
+    marginBottom: 16, borderWidth: 1, borderColor: colors.border,
+  },
+  saveBtn: {
+    backgroundColor: colors.accent, borderRadius: 14,
+    paddingVertical: 15, alignItems: 'center', marginTop: 4,
+  },
+  saveBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.white },
 });
 
 const sp = StyleSheet.create({
   row: {
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  rowHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  name: { fontSize: 13, color: colors.text, fontWeight: '600', flex: 1, marginRight: 8 },
-  badges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  prBadge: {
-    backgroundColor: colors.warning + '28', borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2,
-  },
-  prText: { fontSize: 10, color: colors.warning, fontWeight: '800', letterSpacing: 0.5 },
-  trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  trendText: { fontSize: 10, fontWeight: '700' },
-  meta: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
-  barWrap: { marginTop: 8 },
-  barBg: { height: 4, backgroundColor: colors.cardHighest, borderRadius: 2, overflow: 'hidden' },
-  barFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
-  barLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
-  barLabel: { fontSize: 9, color: colors.textMuted },
+  name: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text, marginRight: 8 },
+  meta: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  deltaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  deltaText: { fontFamily: 'Figtree_700Bold', fontSize: 12 },
 });
