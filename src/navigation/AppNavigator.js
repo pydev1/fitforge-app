@@ -40,7 +40,7 @@ function MainTabs() {
           paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
-        tabBarActiveTintColor: colors.accentLight,
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         tabBarIcon: ({ focused, color }) => {

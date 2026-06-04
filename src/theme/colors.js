@@ -1,19 +1,26 @@
 export const colors = {
-  bg: '#0A0A0F',
-  surface: '#12121A',
-  card: '#1A1A2E',
-  cardAlt: '#16213E',
-  border: '#2A2A3E',
-  accent: '#7C3AED',
-  accentLight: '#8B5CF6',
-  accentDim: '#4C1D95',
+  // 3-tier background depth
+  bg: '#07070F',           // tier 1 – page canvas
+  surface: '#0E0E1C',      // tier 2 – nav bars, section fills
+  card: '#161628',         // tier 3 – default cards
+  cardElevated: '#1F1F38', // tier 4 – raised / hero cards
+  cardAlt: '#141428',
+  border: '#25253D',
+  borderSubtle: '#1A1A30',
+
+  // Electric cyan accent (replaces orange/purple)
+  accent: '#00D4FF',
+  accentLight: '#33DDFF',
+  accentDim: '#003D52',
+
   secondary: '#F43F5E',
   secondaryDim: '#881337',
   success: '#10B981',
   warning: '#F59E0B',
   info: '#3B82F6',
-  text: '#F9FAFB',
-  textSec: '#9CA3AF',
-  textMuted: '#6B7280',
+
+  text: '#F0F2FF',
+  textSec: '#8B90B8',
+  textMuted: '#555878',
   white: '#FFFFFF',
 };
