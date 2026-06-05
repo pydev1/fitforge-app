@@ -27,6 +27,14 @@ const QUICK_PROMPTS = [
   "Fix my posture",
 ];
 
+const SUGGESTION_CARDS = [
+  { icon: 'today-outline', text: "What should I focus on today?" },
+  { icon: 'barbell-outline', text: "I'm sore — what should I do?" },
+  { icon: 'nutrition-outline', text: "Give me a nutrition tip" },
+  { icon: 'body-outline', text: "Check my posture exercises" },
+  { icon: 'trending-up-outline', text: "Am I making progress?" },
+];
+
 function buildWelcomeMessage(profile, progress) {
   if (!profile?.name) {
     return "Hey! I'm your personal fitness coach.\n\nTell me about yourself and I'll put together a plan that actually fits your life. What are you working towards?";
@@ -71,6 +79,8 @@ export default function CoachScreen({ navigation }) {
   const messages = state.chatHistory.length === 0
     ? [WELCOME_MESSAGE]
     : state.chatHistory;
+
+  const showEmptyGrid = state.chatHistory.length === 0 && !isStreaming;
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -168,24 +178,47 @@ export default function CoachScreen({ navigation }) {
           ))}
         </ScrollView>
 
-        {/* Messages */}
-        <ScrollView
-          ref={scrollRef}
-          style={s.messages}
-          contentContainerStyle={s.messagesContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map((msg) => (
-            <Bubble key={msg.id} message={msg} />
-          ))}
-          {isStreaming && !streamingText && <TypingIndicator />}
-          {isStreaming && !!streamingText && (
-            <Bubble
-              message={{ role: 'assistant', content: streamingText, id: 'streaming' }}
-              streaming
-            />
-          )}
-        </ScrollView>
+        {/* Messages or empty-state suggestion grid */}
+        {showEmptyGrid ? (
+          <ScrollView
+            style={s.messages}
+            contentContainerStyle={s.messagesContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <Bubble key="welcome" message={WELCOME_MESSAGE} />
+            <View style={s.suggestionGrid}>
+              {SUGGESTION_CARDS.map((card) => (
+                <TouchableOpacity
+                  key={card.text}
+                  style={s.suggestionCard}
+                  onPress={() => send(card.text)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name={card.icon} size={20} color={colors.accentLight} style={{ marginBottom: 6 }} />
+                  <Text style={s.suggestionCardText}>{card.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            style={s.messages}
+            contentContainerStyle={s.messagesContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {messages.map((msg) => (
+              <Bubble key={msg.id} message={msg} />
+            ))}
+            {isStreaming && !streamingText && <TypingIndicator />}
+            {isStreaming && !!streamingText && (
+              <Bubble
+                message={{ role: 'assistant', content: streamingText, id: 'streaming' }}
+                streaming
+              />
+            )}
+          </ScrollView>
+        )}
 
         {/* Input */}
         <View style={s.inputRow}>
@@ -366,4 +399,15 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.accentDim, opacity: 0.5 },
+  suggestionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
+  suggestionCard: {
+    width: '47%',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'flex-start',
+  },
+  suggestionCardText: { fontSize: 13, color: colors.text, lineHeight: 18, fontWeight: '500' },
 });

@@ -215,67 +215,94 @@ export default function ProgressScreen() {
           </View>
         )}
 
-        {/* Weight chart */}
-        <View style={s.chartCard}>
-          <View style={s.chartHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.chartTitle}>Your weight is moving</Text>
-              {weightDelta !== null && (
-                <Text style={s.chartSub}>
-                  {parseFloat(weightDelta) < 0 ? 'Down' : 'Up'} {Math.abs(parseFloat(weightDelta))} kg since you started
-                </Text>
+        {/* Weight + Waist charts — collapse into one card when both empty */}
+        {!weightChartData && !waistChartData ? (
+          <View style={[s.chartCard, s.chartCardEmpty]}>
+            <Ionicons name="analytics-outline" size={36} color={colors.textMuted} style={{ marginBottom: 12 }} />
+            <Text style={[s.chartTitle, { textAlign: 'center', marginBottom: 6 }]}>Your trend line starts here</Text>
+            <Text style={[s.chartSub, { textAlign: 'center', marginBottom: 18 }]}>
+              Log your first weight and waist measurement to start tracking progress
+            </Text>
+            <TouchableOpacity style={s.inlineLogBtn} onPress={() => setLogModal(true)}>
+              <Ionicons name="add" size={16} color={colors.white} style={{ marginRight: 4 }} />
+              <Text style={s.inlineLogBtnText}>Log now</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Weight chart */}
+            <View style={s.chartCard}>
+              <View style={s.chartHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.chartTitle}>Your weight is moving</Text>
+                  {weightDelta !== null && (
+                    <Text style={s.chartSub}>
+                      {parseFloat(weightDelta) < 0 ? 'Down' : 'Up'} {Math.abs(parseFloat(weightDelta))} kg since you started
+                    </Text>
+                  )}
+                </View>
+                {lastWeight && <Text style={s.chartCurrent}>{lastWeight.value} kg</Text>}
+              </View>
+              {weightChartData ? (
+                <LineChart
+                  data={weightChartData}
+                  width={CHART_W - 32}
+                  height={160}
+                  chartConfig={CHART_CONFIG}
+                  bezier
+                  style={s.chart}
+                  withInnerLines
+                  withOuterLines={false}
+                />
+              ) : (
+                <View style={s.inlineEmpty}>
+                  <Text style={s.inlineEmptyText}>Log 2+ weight entries to see your chart</Text>
+                  <TouchableOpacity onPress={() => setLogModal(true)}>
+                    <Text style={s.inlineLogLink}>+ Log now</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
-            {lastWeight && <Text style={s.chartCurrent}>{lastWeight.value} kg</Text>}
-          </View>
-          {weightChartData ? (
-            <LineChart
-              data={weightChartData}
-              width={CHART_W - 32}
-              height={160}
-              chartConfig={CHART_CONFIG}
-              bezier
-              style={s.chart}
-              withInnerLines
-              withOuterLines={false}
-            />
-          ) : (
-            <EmptyChart message="Log 2 or more weight entries to see your chart" />
-          )}
-        </View>
 
-        {/* Waist chart */}
-        <View style={s.chartCard}>
-          <View style={s.chartHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.chartTitle}>Waist is the real signal</Text>
-              {waistDelta !== null && (
-                <Text style={s.chartSub}>
-                  {parseFloat(waistDelta) < 0 ? 'Down' : 'Up'} {Math.abs(parseFloat(waistDelta))} cm — target is {targetWaist} cm
-                </Text>
+            {/* Waist chart */}
+            <View style={s.chartCard}>
+              <View style={s.chartHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.chartTitle}>Waist is the real signal</Text>
+                  {waistDelta !== null && (
+                    <Text style={s.chartSub}>
+                      {parseFloat(waistDelta) < 0 ? 'Down' : 'Up'} {Math.abs(parseFloat(waistDelta))} cm — target is {targetWaist} cm
+                    </Text>
+                  )}
+                </View>
+                {lastWaist && <Text style={s.chartCurrent}>{lastWaist.value} cm</Text>}
+              </View>
+              {waistChartData ? (
+                <LineChart
+                  data={waistChartData}
+                  width={CHART_W - 32}
+                  height={160}
+                  chartConfig={{
+                    ...CHART_CONFIG,
+                    color: (opacity = 1) => `rgba(255, 87, 34, ${opacity})`,
+                    propsForDots: { ...CHART_CONFIG.propsForDots, stroke: colors.accent },
+                  }}
+                  bezier
+                  style={s.chart}
+                  withInnerLines
+                  withOuterLines={false}
+                />
+              ) : (
+                <View style={s.inlineEmpty}>
+                  <Text style={s.inlineEmptyText}>Log 2+ waist entries to see your chart</Text>
+                  <TouchableOpacity onPress={() => setLogModal(true)}>
+                    <Text style={s.inlineLogLink}>+ Log now</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
-            {lastWaist && <Text style={s.chartCurrent}>{lastWaist.value} cm</Text>}
-          </View>
-          {waistChartData ? (
-            <LineChart
-              data={waistChartData}
-              width={CHART_W - 32}
-              height={160}
-              chartConfig={{
-                ...CHART_CONFIG,
-                color: (opacity = 1) => `rgba(255, 87, 34, ${opacity})`,
-                propsForDots: { ...CHART_CONFIG.propsForDots, stroke: colors.accent },
-              }}
-              bezier
-              style={s.chart}
-              withInnerLines
-              withOuterLines={false}
-            />
-          ) : (
-            <EmptyChart message="Log 2 or more waist entries to see your chart" />
-          )}
-        </View>
+          </>
+        )}
 
         {/* Strength — volume trending up */}
         <StrengthProgress setLogs={setLogs} />
@@ -493,6 +520,18 @@ const s = StyleSheet.create({
   chart: { borderRadius: 10, marginLeft: -8 },
   emptyChart: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 8 },
   emptyChartText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  chartCardEmpty: { alignItems: 'center', paddingVertical: 28 },
+  inlineLogBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.accent, borderRadius: 20,
+    paddingHorizontal: 16, paddingVertical: 8,
+  },
+  inlineLogBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.white },
+  inlineEmpty: {
+    paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  inlineEmptyText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textMuted, flex: 1 },
+  inlineLogLink: { fontFamily: 'Figtree_600SemiBold', fontSize: 12, color: colors.accentLight, marginLeft: 8 },
 
   workoutRow: {
     flexDirection: 'row', alignItems: 'center',

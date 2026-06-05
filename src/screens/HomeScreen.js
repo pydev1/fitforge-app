@@ -1,12 +1,11 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { MOTIVATIONAL_QUOTES } from '../data/workoutData';
 import { colors } from '../theme/colors';
-import { fonts } from '../theme/fonts';
+import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -31,42 +30,54 @@ function getTodayWorkout(generatedPlan) {
   return workout ? { ...workout, dayName } : { isRest: true, dayName };
 }
 
-function getContextLine(todayWorkout) {
-  if (!todayWorkout) return 'Let\'s get moving today.';
-  if (todayWorkout.isRest) return 'Rest day today — you\'ve earned it.';
-  return `${todayWorkout.name} today — ${todayWorkout.focus}.`;
+function getNextWorkout(generatedPlan) {
+  if (!generatedPlan) return null;
+  const today = new Date();
+  for (let i = 1; i <= 7; i++) {
+    const next = new Date(today);
+    next.setDate(today.getDate() + i);
+    const dayName = DAYS[next.getDay()];
+    const workoutId = generatedPlan.schedule?.[dayName];
+    if (workoutId) return generatedPlan.workouts?.[workoutId] ?? null;
+  }
+  return null;
 }
 
-// Count workouts done this week and total scheduled
+function getStreak(completedWorkouts) {
+  if (!completedWorkouts.length) return 0;
+  const sorted = [...completedWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+  let streak = 0;
+  let cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  for (const w of sorted) {
+    const d = fromLocalDateKey(w.date);
+    const diff = Math.round((cursor - d) / 86400000);
+    if (diff <= 1) { streak++; cursor = d; }
+    else break;
+  }
+  return streak;
+}
+
 function getWeekStats(generatedPlan, completedWorkouts) {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0=Sun
-  // Days since Monday
-  const sinceMonday = (dayOfWeek + 6) % 7;
+  const sinceMonday = (today.getDay() + 6) % 7;
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - sinceMonday);
   weekStart.setHours(0, 0, 0, 0);
-
   const doneThisWeek = completedWorkouts.filter(w => {
     const d = new Date(w.date);
     return d >= weekStart;
   }).length;
-
   const scheduled = generatedPlan
     ? Object.values(generatedPlan.schedule).filter(Boolean).length
     : 0;
-
   return { done: doneThisWeek, total: scheduled };
 }
 
-// 7-day activity array (Sun=0 to Sat=6, today is last)
 function getWeekActivity(completedWorkouts) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  // Build from Monday of this week
-  const dayOfWeek = today.getDay();
-  const sinceMonday = (dayOfWeek + 6) % 7;
-
+  const sinceMonday = (today.getDay() + 6) % 7;
   return Array.from({ length: 7 }, (_, i) => {
     const day = new Date(today);
     day.setDate(today.getDate() - sinceMonday + i);
@@ -81,25 +92,87 @@ function getWeekActivity(completedWorkouts) {
   });
 }
 
+function getContextCard(progress, generatedPlan, userProfile, todayWorkout, todayDone) {
+  const today = toLocalDateKey();
+  const completedWorkouts = progress.completedWorkouts || [];
+  const name = userProfile.name || 'Athlete';
+
+  if (todayDone && todayWorkout && !todayWorkout.isRest) {
+    return {
+      type: 'dynamic',
+      icon: 'nutrition-outline',
+      text: `Recovery mode: ${todayWorkout.name} done. Protein within 45 min matters.`,
+    };
+  }
+
+  if (!todayWorkout || todayWorkout.isRest) {
+    return {
+      type: 'dynamic',
+      icon: 'bed-outline',
+      text: 'Rest day — your muscles grow when you\'re not training.',
+    };
+  }
+
+  const streak = getStreak(completedWorkouts);
+  if (streak >= 3) {
+    return {
+      type: 'dynamic',
+      icon: 'flame',
+      text: `${streak} days straight, ${name}. The habit is forming.`,
+    };
+  }
+
+  const dayOfWeek = new Date().getDay();
+  if (dayOfWeek === 1 || dayOfWeek === 2) {
+    const offset = dayOfWeek === 1 ? 7 : 8;
+    const lastMonday = new Date();
+    lastMonday.setDate(lastMonday.getDate() - offset);
+    lastMonday.setHours(0, 0, 0, 0);
+    const lastSunday = new Date(lastMonday);
+    lastSunday.setDate(lastMonday.getDate() + 6);
+    lastSunday.setHours(23, 59, 59, 999);
+    const lastWeekCount = completedWorkouts.filter(w => {
+      const d = new Date(w.date);
+      return d >= lastMonday && d <= lastSunday;
+    }).length;
+    const scheduled = generatedPlan
+      ? Object.values(generatedPlan.schedule).filter(Boolean).length
+      : 0;
+    if (lastWeekCount > 0 && scheduled > 0) {
+      return {
+        type: 'dynamic',
+        icon: 'calendar-outline',
+        text: `New week. You went ${lastWeekCount} for ${scheduled} last week — let's beat that.`,
+      };
+    }
+  }
+
+  return { type: 'quote', ...getDailyQuote() };
+}
+
 export default function HomeScreen({ navigation }) {
   const { state } = useApp();
   const { userProfile, progress, generatedPlan } = state;
 
+  const today = toLocalDateKey();
   const todayWorkout = getTodayWorkout(generatedPlan);
-  const quote = getDailyQuote();
+  const todayDone = progress.completedWorkouts.some(w => w.date === today);
+  const nextWorkout = todayDone ? getNextWorkout(generatedPlan) : null;
 
   const currentWeight = progress.weight[progress.weight.length - 1]?.value ?? userProfile.weight;
   const firstWeight = progress.weight[0];
-  const weightDelta = firstWeight && currentWeight != null
+  const weightDelta = progress.weight.length >= 2 && firstWeight && currentWeight != null
     ? (currentWeight - firstWeight.value).toFixed(1)
     : null;
+  const showWeightDelta = weightDelta !== null && parseFloat(weightDelta) !== 0;
+
   const totalWorkouts = progress.completedWorkouts.length;
+  const streak = getStreak(progress.completedWorkouts);
 
   const currentWaist = progress.waist?.[progress.waist.length - 1]?.value ?? userProfile.waist;
   const startWaist = progress.waist?.[0]?.value ?? userProfile.waist;
-  const targetWaist = 80; // from goal card
+  const targetWaist = 80;
 
-  // Waist progress 0–1 toward target
   const waistProgress = startWaist && currentWaist && startWaist > targetWaist
     ? Math.min(1, Math.max(0, (startWaist - currentWaist) / (startWaist - targetWaist)))
     : 0;
@@ -108,7 +181,13 @@ export default function HomeScreen({ navigation }) {
   const weekLeft = Math.max(0, weekTotal - weekDone);
   const weekActivity = getWeekActivity(progress.completedWorkouts);
 
-  const contextLine = getContextLine(todayWorkout);
+  const contextLine = todayWorkout?.isRest
+    ? 'Rest day today — you\'ve earned it.'
+    : todayWorkout
+    ? `${todayWorkout.name} today — ${todayWorkout.focus}.`
+    : 'Let\'s get moving today.';
+
+  const contextCard = getContextCard(progress, generatedPlan, userProfile, todayWorkout, todayDone);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -126,9 +205,8 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* ── Hero stats card (blue) ── */}
+        {/* ── Hero stats card ── */}
         <View style={s.heroCard}>
-          {/* Primary metric – waist */}
           <View style={s.heroTopRow}>
             <View>
               <Text style={s.heroLabel}>Waist</Text>
@@ -143,7 +221,6 @@ export default function HomeScreen({ navigation }) {
               <Text style={s.weekCount}>
                 {weekDone} done{weekLeft > 0 ? `, ${weekLeft} to go` : ' — nailed it'}
               </Text>
-              {/* Rounded-square week tracker */}
               <View style={s.weekDots}>
                 {weekActivity.map((d, i) => (
                   <View key={i} style={[
@@ -162,7 +239,7 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Journey progress bar */}
+          {/* Progress bar — fix 2: blue fill, empty dot at start */}
           <View style={s.journeyWrap}>
             <View style={s.journeyRow}>
               <Text style={s.journeyLabel}>Start {startWaist ?? '—'} cm</Text>
@@ -170,33 +247,41 @@ export default function HomeScreen({ navigation }) {
             </View>
             <View style={s.journeyTrack}>
               <View style={[s.journeyFill, { width: `${waistProgress * 100}%` }]} />
+              {waistProgress === 0 && (
+                <View style={[s.journeyDot, { left: 0, marginLeft: 0 }]} />
+              )}
               {waistProgress > 0 && waistProgress < 1 && (
                 <View style={[s.journeyDot, { left: `${waistProgress * 100}%` }]} />
               )}
             </View>
           </View>
 
-          {/* Divider */}
           <View style={s.heroDivider} />
 
-          {/* Secondary stats row */}
+          {/* Secondary stats — fix 3: Streak replaces Change */}
           <View style={s.heroSecRow}>
-            <HeroStat label="Weight" value={currentWeight ?? '—'} unit="kg" />
+            <HeroStat
+              label="Weight"
+              value={currentWeight ?? '—'}
+              unit="kg"
+              sub={showWeightDelta ? `${parseFloat(weightDelta) > 0 ? '+' : ''}${weightDelta} kg` : null}
+            />
             <View style={s.heroStatDivider} />
             <HeroStat
-              label="Change"
-              value={weightDelta !== null ? `${parseFloat(weightDelta) > 0 ? '+' : ''}${weightDelta}` : '—'}
-              unit={weightDelta !== null ? 'kg' : ''}
-              positive={weightDelta !== null && parseFloat(weightDelta) <= 0}
+              label="Streak"
+              value={`${streak}`}
+              unit={streak === 1 ? 'day' : 'days'}
             />
             <View style={s.heroStatDivider} />
             <HeroStat label="Sessions" value={`${totalWorkouts}`} unit="" />
           </View>
         </View>
 
-        {/* ── Today's workout CTA ── */}
-        <View style={s.ctaCard}>
-          <Text style={s.ctaEyebrow}>Up next for you today</Text>
+        {/* ── Today's workout CTA — fix 1: completion state ── */}
+        <View style={[s.ctaCard, todayDone && !todayWorkout?.isRest && s.ctaCardDone]}>
+          <Text style={s.ctaEyebrow}>
+            {todayDone && !todayWorkout?.isRest ? 'Today' : 'Up next for you today'}
+          </Text>
           {!todayWorkout || todayWorkout.isRest ? (
             <View style={s.ctaRestRow}>
               <View style={{ flex: 1 }}>
@@ -204,6 +289,16 @@ export default function HomeScreen({ navigation }) {
                 <Text style={s.ctaSub}>Recovery is where the gains happen</Text>
               </View>
               <Ionicons name="moon-outline" size={36} color={colors.textMuted} />
+            </View>
+          ) : todayDone ? (
+            <View style={s.ctaDoneRow}>
+              <Ionicons name="checkmark-circle" size={28} color={colors.success} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={s.ctaDoneTitle}>✓ {todayWorkout.name} — done today</Text>
+                {nextWorkout && (
+                  <Text style={s.ctaDoneNext}>Next up: {nextWorkout.name} tomorrow</Text>
+                )}
+              </View>
             </View>
           ) : (
             <>
@@ -215,18 +310,26 @@ export default function HomeScreen({ navigation }) {
                 <Text style={s.ctaMetaDot}>·</Text>
                 <Text style={s.ctaMetaTxt}>{todayWorkout.exercises?.length ?? 0} exercises</Text>
               </View>
+              <TouchableOpacity
+                style={s.beginBtn}
+                onPress={() => navigation.navigate('Workouts')}
+                activeOpacity={0.85}
+              >
+                <Text style={s.beginBtnText}>Begin</Text>
+                <Ionicons name="arrow-forward" size={16} color="#fff" />
+              </TouchableOpacity>
             </>
           )}
-          <TouchableOpacity
-            style={[s.beginBtn, todayWorkout?.isRest && s.beginBtnRest]}
-            onPress={() => navigation.navigate('Workouts')}
-            activeOpacity={0.85}
-          >
-            <Text style={s.beginBtnText}>
-              {todayWorkout?.isRest ? 'View posture routine' : 'Begin'}
-            </Text>
-            <Ionicons name="arrow-forward" size={16} color="#fff" />
-          </TouchableOpacity>
+          {todayWorkout?.isRest && (
+            <TouchableOpacity
+              style={s.beginBtnRest}
+              onPress={() => navigation.navigate('Workouts')}
+              activeOpacity={0.85}
+            >
+              <Text style={s.beginBtnText}>View posture routine</Text>
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Plan chip ── */}
@@ -239,11 +342,22 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* ── Motivation quote ── */}
+        {/* ── Dynamic context card — fix 8 ── */}
         <View style={s.quoteCard}>
-          <Ionicons name="flame" size={18} color={colors.warning} style={{ marginBottom: 8 }} />
-          <Text style={s.quoteText}>"{quote.quote}"</Text>
-          <Text style={s.quoteAuthor}>— {quote.author}</Text>
+          <Ionicons
+            name={contextCard.type === 'dynamic' ? contextCard.icon : 'flame'}
+            size={18}
+            color={contextCard.type === 'dynamic' ? colors.info : colors.warning}
+            style={{ marginBottom: 8 }}
+          />
+          {contextCard.type === 'dynamic' ? (
+            <Text style={s.quoteText}>{contextCard.text}</Text>
+          ) : (
+            <>
+              <Text style={s.quoteText}>"{contextCard.quote}"</Text>
+              <Text style={s.quoteAuthor}>— {contextCard.author}</Text>
+            </>
+          )}
         </View>
 
         <View style={{ height: 28 }} />
@@ -252,13 +366,14 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-function HeroStat({ label, value, unit, positive }) {
+function HeroStat({ label, value, unit, sub }) {
   return (
     <View style={hs.wrap}>
       <Text style={hs.value}>
         {value}
         {unit ? <Text style={hs.unit}> {unit}</Text> : null}
       </Text>
+      {sub ? <Text style={hs.sub}>{sub}</Text> : null}
       <Text style={hs.label}>{label}</Text>
     </View>
   );
@@ -303,7 +418,6 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Hero card
   heroCard: {
     marginHorizontal: 20,
     backgroundColor: colors.heroCard,
@@ -318,11 +432,11 @@ const s = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 16,
   },
+  // Fix 7: removed textTransform: 'uppercase'
   heroLabel: {
     fontFamily: 'Figtree_600SemiBold',
     fontSize: 12,
     color: colors.heroTextMuted,
-    textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: 4,
   },
@@ -374,9 +488,7 @@ const s = StyleSheet.create({
     borderColor: colors.heroTextSec,
     borderWidth: 1.5,
   },
-  weekSquareFuture: {
-    opacity: 0.4,
-  },
+  weekSquareFuture: { opacity: 0.4 },
   weekSquareLabel: {
     fontFamily: 'Figtree_700Bold',
     fontSize: 8,
@@ -384,6 +496,7 @@ const s = StyleSheet.create({
   },
   weekSquareLabelActive: { color: '#fff' },
 
+  // Fix 2: blue fill, dark unfilled track
   journeyWrap: { marginBottom: 14 },
   journeyRow: {
     flexDirection: 'row',
@@ -396,12 +509,15 @@ const s = StyleSheet.create({
     color: colors.heroTextMuted,
   },
   journeyTrack: {
-    height: 5, backgroundColor: colors.heroCardDeep,
-    borderRadius: 3, overflow: 'visible', position: 'relative',
+    height: 5,
+    backgroundColor: '#2e3a60',
+    borderRadius: 3,
+    overflow: 'visible',
+    position: 'relative',
   },
   journeyFill: {
     height: '100%',
-    backgroundColor: '#ff7848',
+    backgroundColor: '#72aed4',
     borderRadius: 3,
   },
   journeyDot: {
@@ -409,7 +525,7 @@ const s = StyleSheet.create({
     top: -4,
     width: 13, height: 13,
     borderRadius: 7,
-    backgroundColor: '#ff7848',
+    backgroundColor: '#72aed4',
     borderWidth: 2,
     borderColor: colors.heroCard,
     marginLeft: -6,
@@ -430,7 +546,6 @@ const s = StyleSheet.create({
     marginHorizontal: 2,
   },
 
-  // CTA card
   ctaCard: {
     marginHorizontal: 20,
     marginTop: 14,
@@ -439,6 +554,10 @@ const s = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  ctaCardDone: {
+    borderColor: colors.success + '40',
+    backgroundColor: colors.ctaCard,
   },
   ctaEyebrow: {
     fontFamily: 'Figtree_400Regular_Italic',
@@ -490,12 +609,35 @@ const s = StyleSheet.create({
     gap: 8,
   },
   beginBtnRest: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.surface,
+    borderRadius: 14,
+    paddingVertical: 14,
+    gap: 8,
+    marginTop: 10,
   },
   beginBtnText: {
     fontFamily: 'Figtree_700Bold',
     fontSize: 15,
     color: '#fff',
+  },
+  ctaDoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  ctaDoneTitle: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 15,
+    color: colors.success,
+    marginBottom: 4,
+  },
+  ctaDoneNext: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 12,
+    color: colors.textSec,
   },
 
   planChip: {
@@ -552,6 +694,12 @@ const hs = StyleSheet.create({
     fontFamily: 'Figtree_500Medium',
     fontSize: 13,
     color: colors.heroTextSec,
+  },
+  sub: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 9,
+    color: colors.heroTextMuted,
+    marginTop: 1,
   },
   label: {
     fontFamily: 'Figtree_500Medium',

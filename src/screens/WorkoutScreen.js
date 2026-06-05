@@ -128,6 +128,7 @@ const PHASE_COLORS = {
 function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo }) {
   const { state } = useApp();
   const [allSetData, setAllSetData] = React.useState({});
+  const [completedExercises, setCompletedExercises] = React.useState(new Set());
   const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
@@ -146,6 +147,33 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
 
   function handleSetDataChange(exerciseId, newSets) {
     setAllSetData(prev => ({ ...prev, [exerciseId]: newSets }));
+  }
+
+  function toggleExercise(id) {
+    setCompletedExercises(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const totalExercises = workout?.exercises?.length || 0;
+  const doneCount = completedExercises.size;
+
+  function handleComplete() {
+    if (!isDone && doneCount < totalExercises) {
+      Alert.alert(
+        `${doneCount} of ${totalExercises} done`,
+        "You haven't ticked off all exercises. Log the session anyway?",
+        [
+          { text: 'Keep going', style: 'cancel' },
+          { text: 'Log it', onPress: onComplete },
+        ],
+      );
+    } else {
+      onComplete();
+    }
   }
 
   if (!workout) {
@@ -202,8 +230,19 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
       </View>
 
       <SectionLabel text="Main Workout" icon="barbell-outline" color={workout.color} />
+
+      {totalExercises > 0 && (
+        <View style={s.exProgress}>
+          <Text style={s.exProgressText}>{doneCount} of {totalExercises} exercises done</Text>
+          <View style={s.exProgressTrack}>
+            <View style={[s.exProgressFill, { width: `${Math.round((doneCount / totalExercises) * 100)}%` }]} />
+          </View>
+        </View>
+      )}
+
       {workout.exercises?.map(ex => {
         const progressedEx = applyProgression(ex, mod);
+        const isCompleted = completedExercises.has(ex.id);
         return (
           <ExerciseCard
             key={ex.id}
@@ -216,6 +255,8 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             setData={getSetData(progressedEx)}
             onSetDataChange={(newSets) => handleSetDataChange(ex.id, newSets)}
             isDeload={mod.isDeload}
+            isCompleted={isCompleted}
+            onToggleComplete={() => toggleExercise(ex.id)}
           />
         );
       })}
@@ -235,7 +276,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
 
       <TouchableOpacity
         style={[s.completeBtn, isDone && s.completeBtnDone]}
-        onPress={onComplete}
+        onPress={handleComplete}
         activeOpacity={0.8}
       >
         <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color="#fff" />
@@ -294,9 +335,9 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete }) {
   return (
-    <TouchableOpacity style={s.exCard} onPress={onToggle} activeOpacity={0.8}>
+    <TouchableOpacity style={[s.exCard, isCompleted && { opacity: 0.55 }]} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
         <View style={[s.exColorBar, { backgroundColor: accentColor }]} />
         <View style={{ flex: 1 }}>
@@ -307,6 +348,19 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
             <Chip text={`Rest ${exercise.rest}`} />
           </View>
         </View>
+        {onToggleComplete && (
+          <TouchableOpacity
+            style={s.checkBtn}
+            onPress={e => { e.stopPropagation?.(); onToggleComplete(); }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={isCompleted ? colors.success : colors.textMuted}
+            />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={s.infoBtn}
           onPress={e => { e.stopPropagation?.(); onInfo(); }}
@@ -779,11 +833,22 @@ const s = StyleSheet.create({
   },
   sectionLabelText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
 
+  exProgress: {
+    marginBottom: 10, gap: 6,
+  },
+  exProgressText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+  exProgressTrack: {
+    height: 4, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden',
+  },
+  exProgressFill: {
+    height: 4, backgroundColor: colors.success, borderRadius: 2,
+  },
   exCard: {
     backgroundColor: colors.card, borderRadius: 14, marginBottom: 8,
     overflow: 'hidden', borderWidth: 1, borderColor: colors.border,
   },
   exCardTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 8 },
+  checkBtn: { padding: 2 },
   infoBtn: { padding: 2 },
   exColorBar: { width: 3, height: 40, borderRadius: 2 },
   exName: { fontSize: 14, color: colors.text, fontWeight: '600', marginBottom: 6 },
