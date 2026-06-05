@@ -102,6 +102,16 @@ function reducer(state, action) {
           ),
         },
       };
+    case 'REMOVE_LOG_SET':
+      return {
+        ...state,
+        progress: {
+          ...state.progress,
+          setLogs: (state.progress.setLogs || []).filter(
+            item => `${item.date}:${item.exerciseId}:${item.setNumber}` !== action.payload,
+          ),
+        },
+      };
     case 'SET_REMINDER':
       return { ...state, reminderEnabled: action.payload.enabled, reminderHour: action.payload.hour ?? state.reminderHour };
     case 'ADD_MESSAGE':

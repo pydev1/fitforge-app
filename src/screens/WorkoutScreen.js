@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput,
 } from 'react-native';
@@ -23,10 +23,30 @@ export default function WorkoutScreen({ route }) {
   const [activeTab, setActiveTab] = useState(0);
   const [expandedId, setExpandedId] = useState(null);
   const [infoExercise, setInfoExercise] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
 
   useEffect(() => {
     if (route?.params?.tab === 'posture') setActiveTab(2);
   }, [route?.params]);
+
+  useEffect(() => {
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current); };
+  }, []);
+
+  function showToast(message, undoFn) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, undoFn });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }
+
+  function handleUndo() {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = null;
+    const undoFn = toast?.undoFn;
+    setToast(null);
+    undoFn?.();
+  }
 
   const { generatedPlan, progress, userProfile } = state;
   const todayKey = getTodayKey();
@@ -79,6 +99,7 @@ export default function WorkoutScreen({ route }) {
             onComplete={markComplete}
             completedWorkouts={progress.completedWorkouts}
             onInfo={setInfoExercise}
+            onSetSaved={showToast}
           />
         )}
         {activeTab === 1 && (
@@ -94,6 +115,16 @@ export default function WorkoutScreen({ route }) {
       </ScrollView>
 
       <ExerciseInfoModal exercise={infoExercise} onClose={() => setInfoExercise(null)} />
+      {toast && (
+        <View style={s.toastWrap}>
+          <View style={s.toastRow}>
+            <Text style={s.toastText} numberOfLines={1}>{toast.message}</Text>
+            <TouchableOpacity onPress={handleUndo} style={s.toastUndoBtn}>
+              <Text style={s.toastUndoText}>Undo</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -125,7 +156,7 @@ const PHASE_COLORS = {
   'Deload':     colors.success,
 };
 
-function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo }) {
+function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo, onSetSaved }) {
   const { state } = useApp();
   const [allSetData, setAllSetData] = React.useState({});
   const [completedExercises, setCompletedExercises] = React.useState(new Set());
@@ -162,18 +193,16 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const doneCount = completedExercises.size;
 
   function handleComplete() {
-    if (!isDone && doneCount < totalExercises) {
-      Alert.alert(
-        `${doneCount} of ${totalExercises} done`,
-        "You haven't ticked off all exercises. Log the session anyway?",
-        [
-          { text: 'Keep going', style: 'cancel' },
-          { text: 'Log it', onPress: onComplete },
-        ],
-      );
-    } else {
-      onComplete();
-    }
+    if (isDone) { onComplete(); return; }
+    const notDone = totalExercises - doneCount;
+    const title = notDone > 0 ? `${notDone} exercise${notDone > 1 ? 's' : ''} remaining` : 'Log this session?';
+    const message = notDone > 0
+      ? `You've ticked ${doneCount} of ${totalExercises} exercises. Log the session anyway?`
+      : "Great work. Ready to lock in today's session?";
+    Alert.alert(title, message, [
+      { text: notDone > 0 ? 'Keep going' : 'Not yet', style: 'cancel' },
+      { text: 'Log it', onPress: onComplete },
+    ]);
   }
 
   if (!workout) {
@@ -257,6 +286,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             isDeload={mod.isDeload}
             isCompleted={isCompleted}
             onToggleComplete={() => toggleExercise(ex.id)}
+            onSetSaved={onSetSaved}
           />
         );
       })}
@@ -335,7 +365,7 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved }) {
   return (
     <TouchableOpacity style={[s.exCard, isCompleted && { opacity: 0.55 }]} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
@@ -380,7 +410,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
               <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
             </View>
           )}
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} />}
+          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} />}
         </View>
       )}
     </TouchableOpacity>
@@ -639,13 +669,19 @@ function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload) {
   return weight;
 }
 
-function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload }) {
+function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
   const today = toLocalDateKey();
+  const setsRef = React.useRef(sets);
+  React.useEffect(() => { setsRef.current = sets; }, [sets]);
 
   function setField(idx, field, value) {
     onSetsChange(sets.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  }
+
+  function handleUnlock(idx) {
+    onSetsChange(sets.map((s, i) => i === idx ? { ...s, saved: false } : s));
   }
 
   function handleSave(idx) {
@@ -658,6 +694,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload }) {
       Alert.alert('Missing info', requiresWeight ? 'Enter weight and reps to log this set.' : 'Enter reps to log this set.');
       return;
     }
+    const logKey = `${today}:${exercise.id}:${idx + 1}`;
     dispatch({
       type: 'LOG_SET',
       payload: {
@@ -671,6 +708,13 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload }) {
       },
     });
     onSetsChange(sets.map((s, i) => i === idx ? { ...s, saved: true } : s));
+    if (onSetSaved) {
+      const label = w === 0 ? `BW · ${r} reps` : `${w} kg · ${r} reps`;
+      onSetSaved(`Set ${idx + 1} logged: ${label}`, () => {
+        dispatch({ type: 'REMOVE_LOG_SET', payload: logKey });
+        onSetsChange(setsRef.current.map((s, i) => i === idx ? { ...s, saved: false } : s));
+      });
+    }
   }
 
   const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0].trim() : '10';
@@ -743,13 +787,16 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload }) {
               </View>
             )}
 
-            {/* Save */}
+            {/* Save / Edit */}
             <TouchableOpacity
-              style={[sl.colSave, sl.saveBtn, set.saved ? sl.saveBtnDone : { backgroundColor: accentColor }]}
-              onPress={() => !set.saved && handleSave(idx)}
-              disabled={set.saved}
+              style={[sl.colSave, sl.saveBtn, set.saved ? sl.editBtnSaved : { backgroundColor: accentColor }]}
+              onPress={() => set.saved ? handleUnlock(idx) : handleSave(idx)}
             >
-              <Ionicons name="checkmark" size={14} color="#fff" />
+              <Ionicons
+                name={set.saved ? 'pencil' : 'checkmark'}
+                size={14}
+                color={set.saved ? colors.textMuted : '#fff'}
+              />
             </TouchableOpacity>
           </View>
         );
@@ -887,6 +934,23 @@ const s = StyleSheet.create({
   completeBtnDone: { backgroundColor: colors.success },
   completeBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
 
+  toastWrap: {
+    position: 'absolute', bottom: 16, left: 16, right: 16,
+  },
+  toastRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1a2848', borderRadius: 14,
+    paddingLeft: 16, paddingRight: 6, paddingVertical: 12,
+    borderWidth: 1, borderColor: colors.border,
+    elevation: 8,
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+  },
+  toastText: { flex: 1, fontSize: 13, color: colors.text, fontWeight: '500' },
+  toastUndoBtn: {
+    backgroundColor: colors.accent, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, marginLeft: 10,
+  },
+  toastUndoText: { fontSize: 12, color: '#fff', fontWeight: '700' },
   weekBanner: {
     backgroundColor: colors.card, borderRadius: 12, padding: 14,
     marginTop: 8, marginBottom: 14, borderWidth: 1, borderColor: colors.border,
@@ -991,6 +1055,7 @@ const sl = StyleSheet.create({
   feelDot: { width: 16, height: 16, borderRadius: 8 },
   saveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   saveBtnDone: { backgroundColor: colors.success + '40' },
+  editBtnSaved: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   legend: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },

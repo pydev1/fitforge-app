@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Modal, TextInput, Alert, Dimensions,
@@ -104,6 +104,7 @@ export default function ProgressScreen() {
   const [weightInput, setWeightInput] = useState('');
   const [waistInput, setWaistInput] = useState('');
 
+  const today = new Date().toISOString().split('T')[0];
   const setLogs = progress.setLogs || [];
   const streak = getStreak(progress.completedWorkouts);
   const totalWorkouts = progress.completedWorkouts.length;
@@ -119,6 +120,10 @@ export default function ProgressScreen() {
     : null;
   const targetWaist = 80;
 
+  const todayWeightEntry = progress.weight.find(w => w.date === today);
+  const todayWaistEntry = progress.waist.find(w => w.date === today);
+  const hasExistingToday = !!(todayWeightEntry || todayWaistEntry);
+
   const weightChartData = progress.weight.length >= 2 ? buildChartData(progress.weight) : null;
   const waistChartData = progress.waist.length >= 2 ? buildChartData(progress.waist, 6) : null;
 
@@ -132,8 +137,15 @@ export default function ProgressScreen() {
     ? Math.max(1, Math.ceil((Date.now() - firstDate.getTime()) / (7 * 86400000)))
     : null;
 
+  useEffect(() => {
+    if (logModal) {
+      setWeightInput(todayWeightEntry ? String(todayWeightEntry.value) : '');
+      setWaistInput(todayWaistEntry ? String(todayWaistEntry.value) : '');
+    }
+  }, [logModal]);
+
   function saveLog() {
-    const today = new Date().toISOString().split('T')[0];
+    if (!weightInput && !waistInput) { setLogModal(false); return; }
     if (weightInput) {
       const val = parseFloat(weightInput);
       if (isNaN(val) || val < 30 || val > 300) {
@@ -348,7 +360,7 @@ export default function ProgressScreen() {
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Log today's stats</Text>
+              <Text style={s.modalTitle}>{hasExistingToday ? "Update today's stats" : "Log today's stats"}</Text>
               <TouchableOpacity onPress={() => setLogModal(false)}>
                 <Ionicons name="close" size={22} color={colors.textSec} />
               </TouchableOpacity>
