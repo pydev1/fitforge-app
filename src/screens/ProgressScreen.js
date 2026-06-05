@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { fromLocalDateKey } from '../utils/date';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 40;
@@ -49,7 +50,7 @@ function getStreak(completedWorkouts) {
   let cursor = new Date();
   cursor.setHours(0, 0, 0, 0);
   for (const w of sorted) {
-    const d = new Date(w.date);
+    const d = fromLocalDateKey(w.date);
     const diff = Math.round((cursor - d) / 86400000);
     if (diff <= 1) { streak++; cursor = d; }
     else break;

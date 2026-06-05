@@ -65,7 +65,7 @@ function getWeekStats(generatedPlan, completedWorkouts) {
   weekStart.setDate(today.getDate() - sinceMonday);
   weekStart.setHours(0, 0, 0, 0);
   const doneThisWeek = completedWorkouts.filter(w => {
-    const d = new Date(w.date);
+    const d = fromLocalDateKey(w.date);
     return d >= weekStart;
   }).length;
   const scheduled = generatedPlan
@@ -83,11 +83,9 @@ function getWeekActivity(completedWorkouts) {
     day.setDate(today.getDate() - sinceMonday + i);
     const isToday = i === sinceMonday;
     const isFuture = day > today;
-    const active = completedWorkouts.some(w => {
-      const d = new Date(w.date);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime() === day.getTime();
-    });
+    const active = completedWorkouts.some(w =>
+      fromLocalDateKey(w.date).getTime() === day.getTime()
+    );
     return { dayLetter: DAY_LETTERS[day.getDay()], active, isToday, isFuture };
   });
 }
@@ -132,7 +130,7 @@ function getContextCard(progress, generatedPlan, userProfile, todayWorkout, toda
     lastSunday.setDate(lastMonday.getDate() + 6);
     lastSunday.setHours(23, 59, 59, 999);
     const lastWeekCount = completedWorkouts.filter(w => {
-      const d = new Date(w.date);
+      const d = fromLocalDateKey(w.date);
       return d >= lastMonday && d <= lastSunday;
     }).length;
     const scheduled = generatedPlan

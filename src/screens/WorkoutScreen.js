@@ -687,8 +687,9 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
   function handleSave(idx) {
     const set = sets[idx];
     const r = parseInt(set.reps, 10);
-    const eq = Array.isArray(exercise.equipment) ? exercise.equipment : [];
-    const requiresWeight = eq.some(e => e === 'dumbbells' || e === 'barbell');
+    const requiresWeight = Array.isArray(exercise.equipment)
+      ? exercise.equipment.some(e => e === 'dumbbells' || e === 'barbell')
+      : /dumbbell|barbell/i.test(String(exercise.equipment || ''));
     const w = (set.weight === '' || set.weight == null) ? (requiresWeight ? NaN : 0) : parseFloat(set.weight);
     if ((requiresWeight && (isNaN(w) || w <= 0)) || w < 0 || isNaN(r) || r <= 0) {
       Alert.alert('Missing info', requiresWeight ? 'Enter weight and reps to log this set.' : 'Enter reps to log this set.');
