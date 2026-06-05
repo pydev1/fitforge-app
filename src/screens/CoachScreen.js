@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../context/AppContext';
 import { streamChatMessage } from '../services/anthropicService';
 import { colors } from '../theme/colors';
@@ -165,18 +166,27 @@ export default function CoachScreen({ navigation }) {
         </View>
 
         {/* Quick Prompts */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={s.quickScroll}
-          contentContainerStyle={s.quickContent}
-        >
-          {QUICK_PROMPTS.map((p) => (
-            <TouchableOpacity key={p} style={s.quickChip} onPress={() => send(p)} disabled={isStreaming}>
-              <Text style={s.quickChipText}>{p}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <View style={{ position: 'relative' }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.quickScroll}
+            contentContainerStyle={s.quickContent}
+          >
+            {QUICK_PROMPTS.map((p) => (
+              <TouchableOpacity key={p} style={s.quickChip} onPress={() => send(p)} disabled={isStreaming}>
+                <Text style={s.quickChipText}>{p}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <LinearGradient
+            colors={['transparent', colors.bg]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.quickFade}
+            pointerEvents="none"
+          />
+        </View>
 
         {/* Messages or empty-state suggestion grid */}
         {showEmptyGrid ? (
@@ -317,6 +327,9 @@ const s = StyleSheet.create({
   },
   quickScroll: { maxHeight: 48, borderBottomWidth: 1, borderBottomColor: colors.border },
   quickContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
+  quickFade: {
+    position: 'absolute', right: 0, top: 0, bottom: 0, width: 32,
+  },
   quickChip: {
     borderRadius: 20,
     paddingHorizontal: 14,

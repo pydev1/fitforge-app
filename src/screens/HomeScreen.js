@@ -107,7 +107,7 @@ function getContextCard(progress, generatedPlan, userProfile, todayWorkout, toda
     return {
       type: 'dynamic',
       icon: 'bed-outline',
-      text: 'Rest day — your muscles grow when you\'re not training.',
+      text: 'Recovery day: light walking, 2–3 litres of water, and 7–8 hours of sleep. That\'s the work today.',
     };
   }
 
@@ -155,7 +155,13 @@ export default function HomeScreen({ navigation }) {
   const today = toLocalDateKey();
   const todayWorkout = getTodayWorkout(generatedPlan);
   const todayDone = progress.completedWorkouts.some(w => w.date === today);
-  const nextWorkout = todayDone ? getNextWorkout(generatedPlan) : null;
+  const nextWorkout = (todayDone || todayWorkout?.isRest) ? getNextWorkout(generatedPlan) : null;
+  const lastCompletedWorkout = progress.completedWorkouts.length > 0
+    ? [...progress.completedWorkouts].sort((a, b) => b.date.localeCompare(a.date))[0]
+    : null;
+  const lastCompletedName = lastCompletedWorkout
+    ? (generatedPlan?.workouts?.[lastCompletedWorkout.type]?.name || lastCompletedWorkout.type)
+    : null;
 
   const currentWeight = progress.weight[progress.weight.length - 1]?.value ?? userProfile.weight;
   const firstWeight = progress.weight[0];
@@ -180,7 +186,7 @@ export default function HomeScreen({ navigation }) {
   const weekActivity = getWeekActivity(progress.completedWorkouts);
 
   const contextLine = todayWorkout?.isRest
-    ? 'Rest day today — you\'ve earned it.'
+    ? `Rest day — recover well, ${userProfile.name || 'Athlete'}.`
     : todayWorkout
     ? `${todayWorkout.name} today — ${todayWorkout.focus}.`
     : 'Let\'s get moving today.';
@@ -217,7 +223,10 @@ export default function HomeScreen({ navigation }) {
             <View style={s.weekBlock}>
               <Text style={s.weekLabel}>This week</Text>
               <Text style={s.weekCount}>
-                {weekDone} done{weekLeft > 0 ? `, ${weekLeft} to go` : ' — nailed it'}
+                {todayWorkout?.isRest
+                  ? (weekLeft > 0 ? `${weekLeft} remaining this week` : 'Week complete · rest today')
+                  : (weekLeft > 0 ? `${weekDone} done, ${weekLeft} to go` : `${weekDone} done — nailed it`)
+                }
               </Text>
               <View style={s.weekDots}>
                 {weekActivity.map((d, i) => (
@@ -276,15 +285,31 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {/* ── Today's workout CTA — fix 1: completion state ── */}
-        <View style={[s.ctaCard, todayDone && !todayWorkout?.isRest && s.ctaCardDone]}>
+        <View style={[s.ctaCard, todayDone && !todayWorkout?.isRest && s.ctaCardDone, todayWorkout?.isRest && s.ctaCardRest]}>
           <Text style={s.ctaEyebrow}>
-            {todayDone && !todayWorkout?.isRest ? 'Today' : 'Up next for you today'}
+            {(!todayWorkout || todayWorkout.isRest)
+              ? 'Today · Rest'
+              : todayDone
+              ? 'Today'
+              : 'Up next for you today'}
           </Text>
           {!todayWorkout || todayWorkout.isRest ? (
             <View style={s.ctaRestRow}>
               <View style={{ flex: 1 }}>
                 <Text style={s.ctaTitle}>Rest day 😴</Text>
-                <Text style={s.ctaSub}>Recovery is where the gains happen</Text>
+                <Text style={s.ctaSub}>Recover well — muscles grow when you rest</Text>
+                {lastCompletedName && (
+                  <View style={s.ctaRestInfo}>
+                    <Text style={s.ctaRestInfoLabel}>Last session  </Text>
+                    <Text style={s.ctaRestInfoText}>{lastCompletedName}</Text>
+                  </View>
+                )}
+                {nextWorkout && (
+                  <View style={s.ctaRestInfo}>
+                    <Text style={s.ctaRestInfoLabel}>Next up  </Text>
+                    <Text style={s.ctaRestInfoText}>{nextWorkout.name}</Text>
+                  </View>
+                )}
               </View>
               <Ionicons name="moon-outline" size={36} color={colors.textMuted} />
             </View>
@@ -557,6 +582,10 @@ const s = StyleSheet.create({
     borderColor: colors.success + '40',
     backgroundColor: colors.ctaCard,
   },
+  ctaCardRest: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+  },
   ctaEyebrow: {
     fontFamily: 'Figtree_400Regular_Italic',
     fontSize: 12,
@@ -565,8 +594,24 @@ const s = StyleSheet.create({
   },
   ctaRestRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 14,
+  },
+  ctaRestInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  ctaRestInfoLabel: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  ctaRestInfoText: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 12,
+    color: colors.textSec,
+    flex: 1,
   },
   ctaTitle: {
     fontFamily: 'BebasNeue_400Regular',

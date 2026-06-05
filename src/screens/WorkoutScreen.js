@@ -7,10 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
-import { toLocalDateKey } from '../utils/date';
+import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
 import { getProgramWeek, getProgressionModifier, applyProgression } from '../utils/progression';
 
-const TABS = ['Today', 'Weekly', 'Posture Guide'];
+const TABS = ['Today', 'Weekly'];
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function getTodayKey() {
@@ -100,6 +100,7 @@ export default function WorkoutScreen({ route }) {
             completedWorkouts={progress.completedWorkouts}
             onInfo={setInfoExercise}
             onSetSaved={showToast}
+            onGoToPosture={() => setActiveTab(2)}
           />
         )}
         {activeTab === 1 && (
@@ -156,7 +157,7 @@ const PHASE_COLORS = {
   'Deload':     colors.success,
 };
 
-function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo, onSetSaved }) {
+function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo, onSetSaved, onGoToPosture }) {
   const { state } = useApp();
   const [allSetData, setAllSetData] = React.useState({});
   const [completedExercises, setCompletedExercises] = React.useState(new Set());
@@ -217,6 +218,16 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             Use today for a 10-min walk, light stretching, or the Posture Guide routine. Recovery is part of the programme.
           </Text>
         </View>
+        <TouchableOpacity style={[s.postureLinkBanner, { width: '100%', marginTop: 16 }]} onPress={onGoToPosture} activeOpacity={0.8}>
+          <View style={s.postureLinkIconWrap}>
+            <Ionicons name="body-outline" size={18} color={colors.info} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.postureLinkTitle}>Posture Guide</Text>
+            <Text style={s.postureLinkSub}>Critical exercises — also do at your desk</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
     );
   }
@@ -311,6 +322,17 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
       >
         <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color="#fff" />
         <Text style={s.completeBtnText}>{isDone ? 'Session Done ✓' : 'Done for Today'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={s.postureLinkBanner} onPress={onGoToPosture} activeOpacity={0.8}>
+        <View style={s.postureLinkIconWrap}>
+          <Ionicons name="body-outline" size={18} color={colors.info} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.postureLinkTitle}>Posture Guide</Text>
+          <Text style={s.postureLinkSub}>Critical exercises — also do at your desk</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </TouchableOpacity>
     </View>
   );
@@ -454,6 +476,20 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
   const { schedule, workouts } = generatedPlan;
   const trainingCount = Object.values(schedule).filter(Boolean).length;
 
+  // Compute this week's dates (Mon–Sun)
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const sinceMonday = (todayDate.getDay() + 6) % 7;
+  const weekDates = {};
+  DAYS_ORDER.forEach((day, i) => {
+    const d = new Date(todayDate);
+    d.setDate(todayDate.getDate() - sinceMonday + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    weekDates[day] = `${y}-${m}-${dd}`;
+  });
+
   return (
     <View style={{ paddingHorizontal: 16 }}>
       <View style={s.weekBanner}>
@@ -462,11 +498,32 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
         </Text>
       </View>
 
+      {/* Legend */}
+      <View style={s.weekLegend}>
+        {[
+          { color: '#22c55e', label: 'Done' },
+          { color: '#3b82f6', label: 'Upcoming' },
+          { color: '#4b5563', label: 'Rest' },
+        ].map(({ color, label }) => (
+          <View key={label} style={s.weekLegendItem}>
+            <View style={[s.weekLegendDot, { backgroundColor: color }]} />
+            <Text style={s.weekLegendLabel}>{label}</Text>
+          </View>
+        ))}
+        <View style={s.weekLegendItem}>
+          <View style={[s.weekLegendDot, { backgroundColor: 'transparent', borderWidth: 2, borderColor: colors.accent }]} />
+          <Text style={s.weekLegendLabel}>Today</Text>
+        </View>
+      </View>
+
       {DAYS_ORDER.map(day => {
         const workoutId = schedule[day] ?? null;
         const workout = workoutId ? workouts[workoutId] : null;
         const isToday = day === todayKey;
         const isExpanded = expandedDay === day;
+        const dayDate = weekDates[day];
+        const isCompleted = completedWorkouts.some(w => w.date === dayDate);
+        const dotColor = !workout ? '#4b5563' : isCompleted ? '#22c55e' : '#3b82f6';
 
         return (
           <TouchableOpacity
@@ -475,7 +532,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
             onPress={() => workout && setExpandedDay(isExpanded ? null : day)}
             activeOpacity={workout ? 0.75 : 1}
           >
-            <View style={[s.weekDot, { backgroundColor: workout ? workout.color : colors.border }]} />
+            <View style={[s.weekDot, { backgroundColor: dotColor }, isToday && { borderWidth: 2, borderColor: colors.accent }]} />
             <View style={{ flex: 1 }}>
               <View style={s.weekRowTop}>
                 <Text style={[s.weekDay, isToday && { color: colors.accentLight }]}>{day}</Text>
@@ -954,9 +1011,29 @@ const s = StyleSheet.create({
   toastUndoText: { fontSize: 12, color: '#fff', fontWeight: '700' },
   weekBanner: {
     backgroundColor: colors.card, borderRadius: 12, padding: 14,
-    marginTop: 8, marginBottom: 14, borderWidth: 1, borderColor: colors.border,
+    marginTop: 8, marginBottom: 10, borderWidth: 1, borderColor: colors.border,
   },
   weekBannerText: { fontSize: 13, color: colors.textSec, lineHeight: 20 },
+  weekLegend: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    marginBottom: 10, paddingHorizontal: 2,
+  },
+  weekLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  weekLegendDot: { width: 8, height: 8, borderRadius: 4 },
+  weekLegendLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
+  postureLinkBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.card, borderRadius: 14,
+    padding: 14, marginTop: 12, marginBottom: 8, gap: 12,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  postureLinkIconWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: colors.info + '18',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  postureLinkTitle: { fontSize: 14, color: colors.text, fontWeight: '700', marginBottom: 2 },
+  postureLinkSub: { fontSize: 11, color: colors.textSec, lineHeight: 16 },
   weekRow: {
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: colors.card, borderRadius: 12, padding: 14,

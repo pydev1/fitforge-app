@@ -182,16 +182,19 @@ export default function ProgressScreen() {
               </Text>
             )}
           </View>
-          <TouchableOpacity style={s.logBtn} onPress={() => setLogModal(true)}>
-            <Ionicons name="add" size={18} color={colors.white} />
-            <Text style={s.logBtnText}>Log</Text>
-          </TouchableOpacity>
+          {(weightChartData || waistChartData) && (
+            <TouchableOpacity style={s.logBtn} onPress={() => setLogModal(true)}>
+              <Ionicons name="add" size={18} color={colors.white} />
+              <Text style={s.logBtnText}>Log</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Stat cards row — 3 cards */}
         <View style={s.statRow}>
           {/* First card: waist — bright blue */}
           <View style={[s.statCard, s.statCardBlue]}>
+            <Text style={s.statCardPrimaryGoal}>PRIMARY GOAL</Text>
             <Text style={s.statCardValueBlue}>
               {lastWaist?.value ?? userProfile.waist ?? '—'}
               <Text style={s.statCardUnitBlue}> cm</Text>
@@ -203,7 +206,7 @@ export default function ProgressScreen() {
           {/* Second: streak */}
           <View style={s.statCard}>
             <Ionicons name="flame" size={16} color={colors.warning} style={{ marginBottom: 4 }} />
-            <Text style={s.statCardValue}>{streak}<Text style={s.statCardUnit}> days</Text></Text>
+            <Text style={s.statCardValue}>{streak}<Text style={s.statCardUnit}>{streak === 1 ? ' day' : ' days'}</Text></Text>
             <Text style={s.statCardLabel}>Streak</Text>
           </View>
 
@@ -398,7 +401,8 @@ function StrengthProgress({ setLogs }) {
   if (!setLogs.length) {
     return (
       <View style={s.chartCard}>
-        <Text style={s.chartTitle}>Volume is trending up</Text>
+        <Text style={s.chartTitle}>Your lifts so far</Text>
+        <Text style={s.chartSub}>Keep logging to see trends</Text>
         <EmptyChart message="Log sets during workouts to track your strength gains" />
       </View>
     );
@@ -412,10 +416,15 @@ function StrengthProgress({ setLogs }) {
     .sort(([, a], [, b]) => b.logs.length - a.logs.length)
     .slice(0, 6);
 
+  const hasMultipleSessions = Object.values(byExercise).some(({ logs }) => {
+    const distinctDates = new Set(logs.map(l => l.date));
+    return distinctDates.size >= 2;
+  });
+
   return (
     <View style={s.chartCard}>
-      <Text style={s.chartTitle}>Volume is trending up</Text>
-      <Text style={s.chartSub}>Your top lifts over time</Text>
+      <Text style={s.chartTitle}>{hasMultipleSessions ? 'Volume is trending up' : 'Your lifts so far'}</Text>
+      <Text style={s.chartSub}>{hasMultipleSessions ? 'Your top lifts over time' : 'Keep logging to see trends'}</Text>
       {exercises.map(([exId, { name, logs }], i) => {
         const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
         const first = sorted[0].weight;
@@ -496,6 +505,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.statCard,
     borderColor: colors.statCardBorder,
   },
+  statCardPrimaryGoal: { fontFamily: 'Figtree_700Bold', fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
   statCardValueBlue: { fontFamily: 'BebasNeue_400Regular', fontSize: 28, color: '#fff', letterSpacing: 0.5 },
   statCardUnitBlue: { fontFamily: 'Figtree_500Medium', fontSize: 13, color: 'rgba(255,255,255,0.7)' },
   statCardLabelBlue: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
