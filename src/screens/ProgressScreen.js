@@ -87,12 +87,16 @@ function formatPRDate(dateStr) {
   return days[d.getDay()];
 }
 
-// Get muscle group label for a workout type
 function getMuscleGroups(type) {
   const map = {
     push: 'chest & shoulders',
     pull: 'back & biceps',
+    legs: 'legs & core',
     legs_core: 'legs & core',
+    full: 'full body',
+    upper: 'chest, back & shoulders',
+    lower: 'legs & glutes',
+    core: 'abs & core',
     posture: 'posture & mobility',
   };
   return map[type] || type;
@@ -100,7 +104,7 @@ function getMuscleGroups(type) {
 
 export default function ProgressScreen() {
   const { state, dispatch } = useApp();
-  const { progress, userProfile } = state;
+  const { progress, userProfile, generatedPlan } = state;
   const [logModal, setLogModal] = useState(false);
   const [weightInput, setWeightInput] = useState('');
   const [waistInput, setWaistInput] = useState('');
@@ -332,16 +336,21 @@ export default function ProgressScreen() {
             [...progress.completedWorkouts]
               .sort((a, b) => b.date.localeCompare(a.date))
               .slice(0, 8)
-              .map((w, i) => (
-                <View key={`${w.date}-${i}`} style={s.workoutRow}>
-                  <View style={[s.workoutDot, { backgroundColor: WORKOUT_COLORS[w.type] || colors.border }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.workoutType}>{WORKOUT_LABELS[w.type] || w.type}</Text>
-                    <Text style={s.workoutMuscles}>{getMuscleGroups(w.type)}</Text>
+              .map((w, i) => {
+                const plan = generatedPlan?.workouts?.[w.type];
+                const dotColor = plan?.color || WORKOUT_COLORS[w.type] || colors.border;
+                const label = plan?.name || WORKOUT_LABELS[w.type] || w.type;
+                return (
+                  <View key={`${w.date}-${i}`} style={s.workoutRow}>
+                    <View style={[s.workoutDot, { backgroundColor: dotColor }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.workoutType}>{label}</Text>
+                      <Text style={s.workoutMuscles}>{getMuscleGroups(w.type)}</Text>
+                    </View>
+                    <Text style={s.workoutDate}>{w.date}</Text>
                   </View>
-                  <Text style={s.workoutDate}>{w.date}</Text>
-                </View>
-              ))
+                );
+              })
           )}
         </View>
 
@@ -413,7 +422,11 @@ function StrengthProgress({ setLogs }) {
     byExercise[log.exerciseId].logs.push(log);
   });
   const exercises = Object.entries(byExercise)
-    .sort(([, a], [, b]) => b.logs.length - a.logs.length)
+    .sort(([, a], [, b]) => {
+      const lastA = [...a.logs].sort((x, y) => y.date.localeCompare(x.date))[0].date;
+      const lastB = [...b.logs].sort((x, y) => y.date.localeCompare(x.date))[0].date;
+      return lastB.localeCompare(lastA);
+    })
     .slice(0, 6);
 
   const hasMultipleSessions = Object.values(byExercise).some(({ logs }) => {
@@ -462,16 +475,26 @@ function EmptyChart({ message }) {
 }
 
 const WORKOUT_COLORS = {
-  push: '#2878d8',
-  pull: colors.info,
-  legs_core: colors.success,
-  posture: colors.warning,
+  push: '#EA580C',
+  pull: '#3B82F6',
+  legs: '#10B981',
+  legs_core: '#10B981',
+  full: '#F43F5E',
+  upper: '#FB923C',
+  lower: '#06B6D4',
+  core: '#FBBF24',
+  posture: '#F59E0B',
 };
 
 const WORKOUT_LABELS = {
   push: 'Push day',
   pull: 'Pull day',
+  legs: 'Legs + core',
   legs_core: 'Legs + core',
+  full: 'Full body',
+  upper: 'Upper body',
+  lower: 'Lower body',
+  core: 'Core day',
   posture: 'Posture session',
 };
 

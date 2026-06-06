@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { MOTIVATIONAL_QUOTES } from '../data/workoutData';
@@ -151,6 +152,11 @@ function getContextCard(progress, generatedPlan, userProfile, todayWorkout, toda
 export default function HomeScreen({ navigation }) {
   const { state } = useApp();
   const { userProfile, progress, generatedPlan } = state;
+
+  // Force re-render every time this tab gains focus so date-sensitive
+  // values (today, todayWorkout, streak) are never stale after midnight.
+  const [, setFocusTick] = useState(0);
+  useFocusEffect(useCallback(() => { setFocusTick(t => t + 1); }, []));
 
   const today = toLocalDateKey();
   const todayWorkout = getTodayWorkout(generatedPlan);
