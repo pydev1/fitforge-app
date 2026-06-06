@@ -335,7 +335,7 @@ export default function HomeScreen({ navigation }) {
               </View>
               <TouchableOpacity
                 style={s.beginBtn}
-                onPress={() => navigation.navigate('Workouts')}
+                onPress={() => navigation.navigate('Workouts', { tab: 'posture' })}
                 activeOpacity={0.85}
               >
                 <Text style={s.beginBtnText}>Begin</Text>
@@ -346,7 +346,7 @@ export default function HomeScreen({ navigation }) {
           {todayWorkout?.isRest && (
             <TouchableOpacity
               style={s.beginBtnRest}
-              onPress={() => navigation.navigate('Workouts')}
+              onPress={() => navigation.navigate('Workouts', { tab: 'posture' })}
               activeOpacity={0.85}
             >
               <Text style={s.beginBtnText}>View posture routine</Text>

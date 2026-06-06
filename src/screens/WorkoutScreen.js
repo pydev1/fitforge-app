@@ -10,7 +10,7 @@ import { colors } from '../theme/colors';
 import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
 import { getProgramWeek, getProgressionModifier, applyProgression } from '../utils/progression';
 
-const TABS = ['Today', 'Weekly'];
+const TABS = ['Today', 'Weekly', 'Posture Guide'];
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function getTodayKey() {
