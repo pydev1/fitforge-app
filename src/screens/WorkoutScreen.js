@@ -733,6 +733,15 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
   const setsRef = React.useRef(sets);
   React.useEffect(() => { setsRef.current = sets; }, [sets]);
 
+  const lastSessionLogs = React.useMemo(() => {
+    const past = setLogs
+      .filter(l => l.exerciseId === exercise.id && l.date !== today)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    if (!past.length) return null;
+    const lastDate = past[0].date;
+    return { date: lastDate, sets: past.filter(l => l.date === lastDate).sort((a, b) => a.setNumber - b.setNumber) };
+  }, [setLogs, exercise.id, today]);
+
   function setField(idx, field, value) {
     onSetsChange(sets.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   }
@@ -777,8 +786,28 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
 
   const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0].trim() : '10';
 
+  const FEEL_ICONS = { easy: '🟢', good: '🔵', hard: '🔴' };
+
   return (
     <View style={sl.container}>
+      {/* Last session history */}
+      {lastSessionLogs && (
+        <View style={sl.lastSession}>
+          <Text style={sl.lastSessionTitle}>Last session · {lastSessionLogs.date}</Text>
+          <View style={sl.lastSessionRows}>
+            {lastSessionLogs.sets.map(log => (
+              <View key={log.setNumber} style={sl.lastSessionRow}>
+                <Text style={sl.lastSessionSetNum}>Set {log.setNumber}</Text>
+                <Text style={sl.lastSessionVal}>
+                  {log.weight === 0 ? 'BW' : `${log.weight} kg`} × {log.reps} reps
+                </Text>
+                <Text style={sl.lastSessionFeel}>{FEEL_ICONS[log.feedback] ?? ''}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* Header row */}
       <View style={sl.tableHeader}>
         <View style={sl.colNum} />
@@ -1139,4 +1168,14 @@ const sl = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10, color: colors.textMuted },
   legendNote: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
+  lastSession: {
+    backgroundColor: colors.surface, borderRadius: 10, padding: 10,
+    marginBottom: 12, borderWidth: 1, borderColor: colors.border,
+  },
+  lastSessionTitle: { fontSize: 10, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  lastSessionRows: { gap: 4 },
+  lastSessionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lastSessionSetNum: { fontSize: 11, color: colors.textMuted, width: 36 },
+  lastSessionVal: { fontSize: 12, color: colors.textSec, fontWeight: '600', flex: 1 },
+  lastSessionFeel: { fontSize: 12 },
 });

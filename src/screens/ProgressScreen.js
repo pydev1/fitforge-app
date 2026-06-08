@@ -407,6 +407,8 @@ export default function ProgressScreen() {
 }
 
 function StrengthProgress({ setLogs }) {
+  const [expandedEx, setExpandedEx] = useState(null);
+
   if (!setLogs.length) {
     return (
       <View style={s.chartCard}>
@@ -416,11 +418,13 @@ function StrengthProgress({ setLogs }) {
       </View>
     );
   }
+
   const byExercise = {};
   setLogs.forEach(log => {
     if (!byExercise[log.exerciseId]) byExercise[log.exerciseId] = { name: log.exerciseName, logs: [] };
     byExercise[log.exerciseId].logs.push(log);
   });
+
   const exercises = Object.entries(byExercise)
     .sort(([, a], [, b]) => {
       const lastA = [...a.logs].sort((x, y) => y.date.localeCompare(x.date))[0].date;
@@ -437,7 +441,7 @@ function StrengthProgress({ setLogs }) {
   return (
     <View style={s.chartCard}>
       <Text style={s.chartTitle}>{hasMultipleSessions ? 'Volume is trending up' : 'Your lifts so far'}</Text>
-      <Text style={s.chartSub}>{hasMultipleSessions ? 'Your top lifts over time' : 'Keep logging to see trends'}</Text>
+      <Text style={s.chartSub}>{hasMultipleSessions ? 'Tap any exercise to see session history' : 'Keep logging to see trends'}</Text>
       {exercises.map(([exId, { name, logs }], i) => {
         const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
         const first = sorted[0].weight;
@@ -445,17 +449,69 @@ function StrengthProgress({ setLogs }) {
         const best = Math.max(...logs.map(l => l.weight));
         const delta = last - first;
         const isLast = i === exercises.length - 1;
+        const isExpanded = expandedEx === exId;
+
+        // Group logs by date for history view
+        const byDate = {};
+        logs.forEach(l => {
+          if (!byDate[l.date]) byDate[l.date] = [];
+          byDate[l.date].push(l);
+        });
+        const dateHistory = Object.entries(byDate)
+          .sort(([a], [b]) => b.localeCompare(a))
+          .slice(0, 8);
+
         return (
-          <View key={exId} style={[sp.row, isLast && { borderBottomWidth: 0 }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={sp.name} numberOfLines={1}>{name}</Text>
-              <Text style={sp.meta}>{logs.length} sets · best {best} kg · last {last} kg</Text>
-            </View>
-            {delta !== 0 && (
-              <View style={[sp.deltaBadge, { backgroundColor: delta > 0 ? colors.success + '20' : colors.secondary + '20' }]}>
-                <Text style={[sp.deltaText, { color: delta > 0 ? colors.success : colors.secondary }]}>
-                  {delta > 0 ? '+' : ''}{delta} kg
-                </Text>
+          <View key={exId} style={[sp.row, isLast && !isExpanded && { borderBottomWidth: 0 }]}>
+            <TouchableOpacity
+              style={sp.rowHeader}
+              onPress={() => setExpandedEx(isExpanded ? null : exId)}
+              activeOpacity={0.75}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={sp.name} numberOfLines={1}>{name}</Text>
+                <Text style={sp.meta}>{logs.length} sets · best {best} kg · last {last} kg</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {delta !== 0 && (
+                  <View style={[sp.deltaBadge, { backgroundColor: delta > 0 ? colors.success + '20' : colors.secondary + '20' }]}>
+                    <Text style={[sp.deltaText, { color: delta > 0 ? colors.success : colors.secondary }]}>
+                      {delta > 0 ? '+' : ''}{delta} kg
+                    </Text>
+                  </View>
+                )}
+                <Ionicons
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color={colors.textMuted}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <View style={sp.history}>
+                <Text style={sp.historyTitle}>Session history</Text>
+                {dateHistory.map(([date, sessionLogs]) => {
+                  const sessionSorted = [...sessionLogs].sort((a, b) => a.setNumber - b.setNumber);
+                  return (
+                    <View key={date} style={sp.historySession}>
+                      <Text style={sp.historyDate}>{date}</Text>
+                      {sessionSorted.map(l => (
+                        <View key={l.setNumber} style={sp.historySetRow}>
+                          <Text style={sp.historySetNum}>Set {l.setNumber}</Text>
+                          <Text style={sp.historySetVal}>
+                            {l.weight === 0 ? 'BW' : `${l.weight} kg`} × {l.reps} reps
+                          </Text>
+                          {l.feedback && (
+                            <View style={[sp.feelPill, { backgroundColor: FEEL_COLORS[l.feedback] + '25' }]}>
+                              <Text style={[sp.feelPillText, { color: FEEL_COLORS[l.feedback] }]}>{l.feedback}</Text>
+                            </View>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -464,6 +520,8 @@ function StrengthProgress({ setLogs }) {
     </View>
   );
 }
+
+const FEEL_COLORS = { easy: '#22c55e', good: '#3b82f6', hard: '#ef4444' };
 
 function EmptyChart({ message }) {
   return (
@@ -622,11 +680,28 @@ const s = StyleSheet.create({
 
 const sp = StyleSheet.create({
   row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border,
+    paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  rowHeader: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
   },
   name: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text, marginRight: 8 },
   meta: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted, marginTop: 2 },
   deltaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   deltaText: { fontFamily: 'Figtree_700Bold', fontSize: 12 },
+  history: {
+    backgroundColor: colors.bg, borderRadius: 10, padding: 10,
+    marginBottom: 8, gap: 10,
+  },
+  historyTitle: {
+    fontFamily: 'Figtree_700Bold', fontSize: 10, color: colors.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2,
+  },
+  historySession: { gap: 4 },
+  historyDate: { fontFamily: 'Figtree_600SemiBold', fontSize: 11, color: colors.accentLight, marginBottom: 2 },
+  historySetRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  historySetNum: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted, width: 36 },
+  historySetVal: { fontFamily: 'Figtree_600SemiBold', fontSize: 12, color: colors.text, flex: 1 },
+  feelPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  feelPillText: { fontFamily: 'Figtree_700Bold', fontSize: 10 },
 });
