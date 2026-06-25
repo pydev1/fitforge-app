@@ -567,4 +567,5 @@ export const INITIAL_PROGRESS = {
   weight: [],
   waist: [],
   completedWorkouts: [],
+  setLogs: [],
 };
