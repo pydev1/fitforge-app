@@ -1,6 +1,71 @@
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
+// Returns { suggestions: [{ id, weight, reason }] } or null on failure/no key.
+// Called once per session load; weight is null when no history exists yet.
+export async function getWorkoutSuggestions(exercises, completedWorkouts, userProfile, apiKey) {
+  if (!apiKey || !exercises?.length) return null;
+
+  // Build compact per-exercise history string (last 5 sessions, newest first)
+  const historyBlock = exercises.map(ex => {
+    const sessions = [...completedWorkouts]
+      .filter(w => w.exercises?.some(e => e.id === ex.id))
+      .slice(-5)
+      .reverse()
+      .map(w => {
+        const exData = w.exercises.find(e => e.id === ex.id);
+        const setsStr = (exData?.sets || [])
+          .filter(s => s.weight && s.completed)
+          .map(s => `${s.weight}kg(${s.feedback || '?'})`)
+          .join(', ');
+        return `  ${w.date}: ${setsStr || 'no data'}`;
+      });
+    return `${ex.name} [id:${ex.id}] target:${ex.reps}reps\n${sessions.length ? sessions.join('\n') : '  No history yet'}`;
+  }).join('\n\n');
+
+  const prompt = `You are a strength coach AI. Suggest the optimal starting weight for each exercise in today's session based on the athlete's history.
+
+Athlete: ${userProfile.fitnessLevel || 'beginner'} level, goals: ${(userProfile.goals || []).join('/')}, bodyweight: ${userProfile.weight ?? '?'}kg
+
+${historyBlock}
+
+Reply with ONLY valid JSON, no other text:
+{"suggestions":[{"id":"<exercise_id>","weight":<number or null>,"reason":"<8 words max>"}]}
+
+Rules:
+- weight must be null if there is no history (first session)
+- Round suggested weight to nearest 0.5kg
+- If last session sets were mostly "easy", increase by 5-10%
+- If last session sets were mostly "hard", decrease by 5%
+- If mixed or "good", small increase (~2.5%) if positive multi-session trend, otherwise maintain
+- Base suggestion on actual logged weights, not assumptions`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    return parsed?.suggestions?.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildSystemPrompt(userProfile) {
   if (!userProfile || !userProfile.name) {
     return `You are FitForge AI Coach — a personal fitness assistant. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
+  Alert, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
+import { getWorkoutSuggestions } from '../services/anthropicService';
 import { colors } from '../theme/colors';
 
 const TABS = ['Today', 'Weekly', 'Posture Guide'];
@@ -50,6 +51,8 @@ export default function WorkoutScreen({ route }) {
   const [expandedId, setExpandedId] = useState(null);
   const [infoExercise, setInfoExercise] = useState(null);
   const [sessionSets, setSessionSets] = useState({});
+  const [aiSuggestions, setAiSuggestions] = useState({});
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     if (route?.params?.tab === 'posture') setActiveTab(2);
@@ -90,6 +93,43 @@ export default function WorkoutScreen({ route }) {
     });
     setSessionSets(initial);
   }, [todayWorkoutId]);
+
+  // Fetch AI-driven weight suggestions once per session load.
+  // Runs in parallel with the history seeding above; when the API responds
+  // it overwrites weights on uncompleted sets and surfaces a reason in the UI.
+  // Falls back silently to the history-based seed if no key or on any error.
+  useEffect(() => {
+    if (!todayWorkout?.exercises || !state.apiKey) return;
+    let cancelled = false;
+    setAiLoading(true);
+    setAiSuggestions({});
+    getWorkoutSuggestions(
+      todayWorkout.exercises,
+      progress.completedWorkouts,
+      userProfile,
+      state.apiKey,
+    ).then(result => {
+      if (cancelled || !result?.suggestions) return;
+      const map = {};
+      result.suggestions.forEach(s => { map[s.id] = s; });
+      setAiSuggestions(map);
+      setSessionSets(prev => {
+        const next = { ...prev };
+        todayWorkout.exercises.forEach(ex => {
+          const sug = map[ex.id];
+          if (sug?.weight != null) {
+            next[ex.id] = (next[ex.id] || []).map(set =>
+              set.completed ? set : { ...set, weight: String(sug.weight), suggested: true, aiSuggested: true }
+            );
+          }
+        });
+        return next;
+      });
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setAiLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [todayWorkoutId, state.apiKey]);
 
   function handleSetUpdate(exerciseId, setIdx, field, value) {
     setSessionSets(prev => {
@@ -191,6 +231,8 @@ export default function WorkoutScreen({ route }) {
               sessionSets={sessionSets}
               onSetUpdate={handleSetUpdate}
               getPrevRef={getPrevSessionRef}
+              aiSuggestions={aiSuggestions}
+              aiLoading={aiLoading}
             />
           )}
           {activeTab === 1 && (
@@ -217,6 +259,7 @@ function TodayTab({
   workout, dayName, expandedId, setExpandedId,
   onComplete, completedWorkouts, onInfo,
   sessionSets, onSetUpdate, getPrevRef,
+  aiSuggestions, aiLoading,
 }) {
   const today = new Date().toISOString().split('T')[0];
   const isDone = completedWorkouts.some(w => w.date === today);
@@ -290,6 +333,8 @@ function TodayTab({
           sets={sessionSets[ex.id] || []}
           onSetUpdate={(idx, field, val) => onSetUpdate(ex.id, idx, field, val)}
           prevRef={getPrevRef(ex.id)}
+          aiSuggestion={aiSuggestions[ex.id]}
+          aiLoading={aiLoading}
         />
       ))}
 
@@ -318,7 +363,7 @@ function TodayTab({
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef, aiSuggestion, aiLoading }) {
   const completedCount = sets.filter(s => s.completed).length;
   const allDone = completedCount === sets.length && sets.length > 0;
 
@@ -373,6 +418,8 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets,
             onSetUpdate={onSetUpdate}
             prevRef={prevRef}
             accentColor={accentColor}
+            aiSuggestion={aiSuggestion}
+            aiLoading={aiLoading}
           />
         </View>
       )}
@@ -382,7 +429,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets,
 
 /* ─── Set Tracker ───────────────────────────────────────────────── */
 
-function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor }) {
+function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor, aiSuggestion, aiLoading }) {
   return (
     <View style={st.container}>
       <View style={st.header}>
@@ -390,11 +437,21 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor }) {
           <Ionicons name="barbell" size={14} color={accentColor} style={{ marginRight: 6 }} />
           <Text style={[st.headerTitle, { color: accentColor }]}>TRACK SETS</Text>
         </View>
-        {prevRef && (
-          <Text style={st.prevRef}>
-            Last session: {prevRef.avg} kg × {prevRef.sets} sets
-          </Text>
-        )}
+        {aiLoading ? (
+          <View style={st.aiRow}>
+            <ActivityIndicator size="small" color={colors.accentLight} />
+            <Text style={st.aiLoadingText}>AI analysing...</Text>
+          </View>
+        ) : aiSuggestion ? (
+          <View style={st.aiRow}>
+            <Text style={st.aiLabel}>✦ AI</Text>
+            <Text style={st.aiReason} numberOfLines={1}>
+              {aiSuggestion.weight != null ? `${aiSuggestion.weight}kg · ` : ''}{aiSuggestion.reason}
+            </Text>
+          </View>
+        ) : prevRef ? (
+          <Text style={st.prevRef}>Last: {prevRef.avg}kg × {prevRef.sets} sets</Text>
+        ) : null}
       </View>
 
       {/* Column labels */}
@@ -452,7 +509,9 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
         {/* Weight input */}
         <View style={{ flex: 1, marginHorizontal: 8 }}>
           {set.suggested && !set.completed && (
-            <Text style={sr.suggestedLabel}>suggested</Text>
+            <Text style={[sr.suggestedLabel, set.aiSuggested && sr.aiSuggestedLabel]}>
+              {set.aiSuggested ? '✦ AI' : 'suggested'}
+            </Text>
           )}
           <View style={sr.weightRow}>
             <TextInput
@@ -950,6 +1009,10 @@ const st = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
   prevRef: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
+  aiRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '58%' },
+  aiLabel: { fontSize: 10, color: colors.accentLight, fontWeight: '800', letterSpacing: 0.5 },
+  aiReason: { fontSize: 10, color: colors.accentLight, fontStyle: 'italic', flexShrink: 1 },
+  aiLoadingText: { fontSize: 10, color: colors.accentLight, fontStyle: 'italic', marginLeft: 4 },
   colRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -993,7 +1056,8 @@ const sr = StyleSheet.create({
   setNum: { fontSize: 13, color: colors.textSec, fontWeight: '700' },
 
   weightRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  suggestedLabel: { fontSize: 9, color: colors.accentLight, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
+  suggestedLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
+  aiSuggestedLabel: { color: colors.accentLight },
   weightInput: {
     width: 60, height: 36,
     backgroundColor: colors.card,
