@@ -31,6 +31,27 @@ function suggestWeight(weight, feedback) {
   return suggested > 0 ? String(suggested) : weight;
 }
 
+// Parse "8-12" or "12–15" into { min, max }. Returns null for duration targets.
+function parseRepRange(str) {
+  const m = String(str || '').match(/(\d+)[-–](\d+)/);
+  if (m) return { min: parseInt(m[1]), max: parseInt(m[2]) };
+  const s = String(str || '').match(/^(\d+)$/);
+  if (s) { const n = parseInt(s[1]); return { min: n, max: n }; }
+  return null;
+}
+
+// Derive easy/good/hard from actual reps vs target range.
+// Returns null when data is missing or target is duration-based.
+function deriveFeedback(repsStr, targetRepsStr) {
+  const done = parseInt(repsStr);
+  if (!done) return null;
+  const range = parseRepRange(targetRepsStr);
+  if (!range) return null;
+  if (done >= range.max) return 'easy';  // hit the ceiling — could do more
+  if (done <= range.min) return 'hard';  // hit the floor — couldn't do more
+  return 'good';
+}
+
 function getFeedbackColor(feedback) {
   if (feedback === 'easy') return colors.success;
   if (feedback === 'good') return colors.info;
@@ -85,7 +106,9 @@ export default function WorkoutScreen({ route }) {
         const perSetWeight = prevSets[i]?.weight ? String(prevSets[i].weight) : lastWeight;
         return {
           weight: perSetWeight,
+          reps: '',
           feedback: null,
+          autoFeedback: false,
           completed: false,
           suggested: !!perSetWeight,
         };
@@ -182,6 +205,7 @@ export default function WorkoutScreen({ route }) {
       sets: (sessionSets[ex.id] || []).map((s, i) => ({
         setNum: i + 1,
         weight: parseFloat(s.weight) || null,
+        reps: parseInt(s.reps) || null,
         feedback: s.feedback,
         completed: s.completed,
       })),
@@ -457,8 +481,8 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor, aiSugge
       {/* Column labels */}
       <View style={st.colRow}>
         <Text style={[st.colLabel, { width: 42 }]}>SET</Text>
-        <Text style={[st.colLabel, { flex: 1 }]}>WEIGHT</Text>
-        <Text style={[st.colLabel, { width: 70 }]}>FEEL</Text>
+        <Text style={[st.colLabel, { flex: 1 }]}>WEIGHT · REPS</Text>
+        <Text style={[st.colLabel, { width: 60 }]}>FEEL</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -470,13 +494,14 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor, aiSugge
           isNext={i === sets.filter(s => s.completed).length}
           onUpdate={(field, val) => onSetUpdate(i, field, val)}
           accentColor={accentColor}
+          targetReps={exercise.reps}
         />
       ))}
 
       <View style={st.legend}>
-        <LegendItem color={colors.success} label="Easy → weight goes up next set" />
-        <LegendItem color={colors.info}    label="Good → weight stays" />
-        <LegendItem color={colors.secondary} label="Hard → weight drops next set" />
+        <LegendItem color={colors.success} label="Reps ≥ top of range → Easy → weight up" />
+        <LegendItem color={colors.info}    label="Reps in middle → Good → weight stays" />
+        <LegendItem color={colors.secondary} label="Reps ≤ bottom → Hard → weight drops" />
       </View>
     </View>
   );
@@ -493,7 +518,7 @@ function LegendItem({ color, label }) {
 
 /* ─── Set Row ───────────────────────────────────────────────────── */
 
-function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
+function SetRow({ setNum, set, isNext, onUpdate, accentColor, targetReps }) {
   return (
     <View>
       <View style={[
@@ -506,30 +531,42 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
           <Text style={[sr.setNum, set.completed && { color: colors.success }]}>{setNum}</Text>
         </View>
 
-        {/* Weight input */}
-        <View style={{ flex: 1, marginHorizontal: 8 }}>
+        {/* Weight + Reps inputs */}
+        <View style={{ flex: 1, marginHorizontal: 6 }}>
           {set.suggested && !set.completed && (
             <Text style={[sr.suggestedLabel, set.aiSuggested && sr.aiSuggestedLabel]}>
               {set.aiSuggested ? '✦ AI' : 'suggested'}
             </Text>
           )}
-          <View style={sr.weightRow}>
+          <View style={sr.inputsRow}>
             <TextInput
-              style={[sr.weightInput, set.completed && sr.weightInputDone]}
+              style={[sr.compactInput, set.completed && sr.inputDone]}
               value={set.weight}
               onChangeText={val => onUpdate('weight', val.replace(/[^0-9.]/g, ''))}
-              placeholder="0"
+              placeholder="—"
               placeholderTextColor={colors.textMuted}
               keyboardType="decimal-pad"
               editable={!set.completed}
               selectTextOnFocus
             />
-            <Text style={sr.kgLabel}>kg</Text>
+            <Text style={sr.unitLabel}>kg</Text>
+            <Text style={sr.inputDiv}>·</Text>
+            <TextInput
+              style={[sr.compactInput, set.completed && sr.inputDone]}
+              value={set.reps}
+              onChangeText={val => onUpdate('reps', val.replace(/[^0-9]/g, ''))}
+              placeholder="—"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              editable={!set.completed}
+              selectTextOnFocus
+            />
+            <Text style={sr.unitLabel}>reps</Text>
           </View>
         </View>
 
-        {/* Feedback display (after done) */}
-        <View style={{ width: 70, alignItems: 'center' }}>
+        {/* Feedback chip (after done) */}
+        <View style={{ width: 60, alignItems: 'center' }}>
           {set.completed && set.feedback ? (
             <View style={[sr.fbDoneChip, { backgroundColor: getFeedbackColor(set.feedback) + '25', borderColor: getFeedbackColor(set.feedback) + '60' }]}>
               <Ionicons name={getFeedbackIcon(set.feedback)} size={12} color={getFeedbackColor(set.feedback)} />
@@ -537,10 +574,8 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
                 {set.feedback.charAt(0).toUpperCase() + set.feedback.slice(1)}
               </Text>
             </View>
-          ) : !set.completed ? (
-            <Text style={{ fontSize: 11, color: colors.textMuted }}>—</Text>
           ) : (
-            <Text style={{ fontSize: 11, color: colors.textMuted }}>rate it</Text>
+            <Text style={{ fontSize: 11, color: colors.textMuted }}>—</Text>
           )}
         </View>
 
@@ -549,14 +584,17 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
           style={sr.checkBtn}
           onPress={() => {
             if (set.completed) {
-              // Uncomplete — clear feedback too
               onUpdate('completed', false);
               onUpdate('feedback', null);
+              onUpdate('autoFeedback', false);
             } else {
-              if (!set.weight) {
-                // Allow completing without weight (bodyweight)
-              }
               onUpdate('completed', true);
+              // Auto-derive feedback from reps vs target range — removes guesswork
+              const derived = deriveFeedback(set.reps, targetReps);
+              if (derived) {
+                onUpdate('feedback', derived);
+                onUpdate('autoFeedback', true);
+              }
             }
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -569,10 +607,10 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
         </TouchableOpacity>
       </View>
 
-      {/* Feedback prompt — appears inline below the row when set just completed */}
+      {/* Manual feedback prompt — only shown when reps weren't entered or target is unparseable */}
       {set.completed && !set.feedback && (
         <View style={sr.feedbackPromptRow}>
-          <Text style={sr.feedbackPromptLabel}>How was that set?</Text>
+          <Text style={sr.feedbackPromptLabel}>How did it feel?</Text>
           {['easy', 'good', 'hard'].map(f => (
             <TouchableOpacity
               key={f}
@@ -589,7 +627,26 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor }) {
         </View>
       )}
 
-      {/* Auto-suggestion hint */}
+      {/* Auto-rated indicator with override buttons */}
+      {set.completed && set.feedback && set.autoFeedback && (
+        <View style={sr.autoFbRow}>
+          <Text style={sr.autoFbLabel}>Auto-rated from reps · override:</Text>
+          {['easy', 'good', 'hard'].map(f => (
+            <TouchableOpacity
+              key={f}
+              style={[sr.fbTinyBtn, set.feedback === f && { borderColor: getFeedbackColor(f), backgroundColor: getFeedbackColor(f) + '25' }]}
+              onPress={() => { onUpdate('feedback', f); onUpdate('autoFeedback', false); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[sr.fbTinyText, set.feedback === f && { color: getFeedbackColor(f) }]}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Next-set weight-change hint */}
       {set.completed && set.feedback && set.feedback !== 'good' && (
         <View style={sr.suggestionHint}>
           <Ionicons
@@ -1055,25 +1112,27 @@ const sr = StyleSheet.create({
   },
   setNum: { fontSize: 13, color: colors.textSec, fontWeight: '700' },
 
-  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  suggestedLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
-  aiSuggestedLabel: { color: colors.accentLight },
-  weightInput: {
-    width: 60, height: 36,
+  inputsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  compactInput: {
+    width: 52, height: 36,
     backgroundColor: colors.card,
     borderRadius: 8, borderWidth: 1, borderColor: colors.border,
-    textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text,
+    textAlign: 'center', fontSize: 15, fontWeight: '700', color: colors.text,
   },
-  weightInputDone: {
+  inputDone: {
     backgroundColor: colors.success + '15',
     borderColor: colors.success + '40',
     color: colors.success,
   },
-  kgLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+  unitLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+  inputDiv: { fontSize: 13, color: colors.border, marginHorizontal: 2 },
+
+  suggestedLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
+  aiSuggestedLabel: { color: colors.accentLight },
 
   fbDoneChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
-    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3,
+    borderRadius: 8, paddingHorizontal: 5, paddingVertical: 3,
     borderWidth: 1,
   },
   fbDoneText: { fontSize: 10, fontWeight: '700' },
@@ -1097,6 +1156,19 @@ const sr = StyleSheet.create({
     borderRadius: 8, borderWidth: 1,
   },
   fbBtnText: { fontSize: 12, fontWeight: '700' },
+
+  autoFbRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+    paddingHorizontal: 12, paddingVertical: 6, gap: 6,
+    backgroundColor: colors.surface + '80',
+    borderBottomWidth: 1, borderBottomColor: colors.border + '80',
+  },
+  autoFbLabel: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic', marginRight: 2 },
+  fbTinyBtn: {
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 6, borderWidth: 1, borderColor: colors.border,
+  },
+  fbTinyText: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
 
   suggestionHint: {
     flexDirection: 'row',

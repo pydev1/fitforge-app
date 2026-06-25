@@ -16,7 +16,7 @@ export async function getWorkoutSuggestions(exercises, completedWorkouts, userPr
         const exData = w.exercises.find(e => e.id === ex.id);
         const setsStr = (exData?.sets || [])
           .filter(s => s.weight && s.completed)
-          .map(s => `${s.weight}kg(${s.feedback || '?'})`)
+          .map(s => `${s.weight}kg×${s.reps ?? '?'}reps(${s.feedback || '?'})`)
           .join(', ');
         return `  ${w.date}: ${setsStr || 'no data'}`;
       });
