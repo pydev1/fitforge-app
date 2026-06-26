@@ -341,7 +341,7 @@ export default function HomeScreen({ navigation }) {
               </View>
               <TouchableOpacity
                 style={s.beginBtn}
-                onPress={() => navigation.navigate('Workouts', { tab: 'posture' })}
+                onPress={() => navigation.navigate('Workouts', { tab: 'today' })}
                 activeOpacity={0.85}
               >
                 <Text style={s.beginBtnText}>Begin</Text>

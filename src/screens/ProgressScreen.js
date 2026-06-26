@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
-import { fromLocalDateKey } from '../utils/date';
+import { fromLocalDateKey, toLocalDateKey } from '../utils/date';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 40;
@@ -109,7 +109,7 @@ export default function ProgressScreen() {
   const [weightInput, setWeightInput] = useState('');
   const [waistInput, setWaistInput] = useState('');
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
   const setLogs = progress.setLogs || [];
   const streak = getStreak(progress.completedWorkouts);
   const totalWorkouts = progress.completedWorkouts.length;

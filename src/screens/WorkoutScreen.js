@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
 import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
 import { getProgramWeek, getProgressionModifier, applyProgression } from '../utils/progression';
+import { getWorkoutSuggestions } from '../services/anthropicService';
 
 const TABS = ['Today', 'Weekly', 'Posture Guide'];
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -28,6 +29,7 @@ export default function WorkoutScreen({ route }) {
 
   useEffect(() => {
     if (route?.params?.tab === 'posture') setActiveTab(2);
+    else if (route?.params?.tab === 'today') setActiveTab(0);
   }, [route?.params]);
 
   useEffect(() => {
@@ -161,11 +163,38 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const { state } = useApp();
   const [allSetData, setAllSetData] = React.useState({});
   const [completedExercises, setCompletedExercises] = React.useState(new Set());
+  const [aiSuggestions, setAiSuggestions] = React.useState({});
+  const [aiLoading, setAiLoading] = React.useState(false);
   const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
   const programWeek = getProgramWeek(completedWorkouts);
   const mod = getProgressionModifier(programWeek);
+
+  // Fetch AI starting-weight suggestions once per session load (gated on API key).
+  // Completed sets are never overwritten — suggestions only feed input placeholders.
+  React.useEffect(() => {
+    if (!workout?.exercises?.length || !state.apiKey) {
+      setAiSuggestions({});
+      setAiLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAiLoading(true);
+    getWorkoutSuggestions(workout.exercises, state.progress.setLogs || [], state.userProfile, state.apiKey)
+      .then(res => {
+        if (cancelled || !res?.suggestions) return;
+        const map = {};
+        res.suggestions.forEach(sug => {
+          if (sug.weight != null) map[sug.id] = { weight: sug.weight, reason: sug.reason };
+        });
+        setAiSuggestions(map);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setAiLoading(false); });
+    return () => { cancelled = true; };
+    // Re-run only when the workout or key changes — not on every set log.
+  }, [workout?.id, state.apiKey]);
 
   function getSetData(exercise) {
     const setLogs = state.progress.setLogs || [];
@@ -298,6 +327,8 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             isCompleted={isCompleted}
             onToggleComplete={() => toggleExercise(ex.id)}
             onSetSaved={onSetSaved}
+            aiSuggestion={aiSuggestions[ex.id]}
+            aiLoading={aiLoading && !!state.apiKey}
           />
         );
       })}
@@ -387,7 +418,7 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved, aiSuggestion, aiLoading }) {
   return (
     <TouchableOpacity style={[s.exCard, isCompleted && { opacity: 0.55 }]} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
@@ -432,7 +463,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
               <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
             </View>
           )}
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} />}
+          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} aiSuggestion={aiSuggestion} aiLoading={aiLoading} />}
         </View>
       )}
     </TouchableOpacity>
@@ -692,11 +723,12 @@ function ExerciseInfoModal({ exercise, onClose }) {
 
 /* ─── Set Logger ─────────────────────────────────────────────────── */
 
-const FEEL_OPTIONS = [
-  { key: 'easy', color: colors.success, label: 'Easy' },
-  { key: 'good', color: colors.info, label: 'Good' },
-  { key: 'hard', color: colors.secondary, label: 'Hard' },
-];
+// Outcome of an auto-rated set (derived from reps, no manual input).
+const OUTCOME = {
+  easy: { label: 'Topped it', color: colors.success, icon: 'arrow-up' },
+  good: { label: 'On target', color: colors.info, icon: 'checkmark' },
+  hard: { label: 'Tough',     color: colors.secondary, icon: 'arrow-down' },
+};
 
 function parseRepRange(reps) {
   const matches = String(reps || '').match(/\d+/g)?.map(Number) || [];
@@ -704,29 +736,52 @@ function parseRepRange(reps) {
   return { min: matches[0], max: matches[1] || matches[0] };
 }
 
+// Objectively rate a set from reps alone — no "feel" guess required.
+// Working sets are capped at the target, so they can only register a miss (hard)
+// or success (good). The final AMRAP set is taken to your max, so beating the top
+// of the range registers as easy (you've outgrown the weight → go up).
+function deriveFeedback(repsStr, repsTarget, isAmrap) {
+  const done = parseInt(repsStr, 10);
+  if (!done) return 'good';
+  const { min, max } = parseRepRange(repsTarget);
+  if (done < min) return 'hard';
+  if (isAmrap && isFinite(max) && done >= max) return 'easy';
+  return 'good';
+}
+
+// Next-session starting weight. The progression decision is made once per exercise
+// from last session's final (max) set, then applied uniformly to every set so the
+// suggested loads stay consistent across the working sets.
 function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload) {
-  const relevant = setLogs
-    .filter(l => l.exerciseId === exercise.id && l.setNumber === setIdx + 1 && l.date !== today)
+  const past = setLogs
+    .filter(l => l.exerciseId === exercise.id && l.date !== today)
     .sort((a, b) => b.date.localeCompare(a.date));
-  if (!relevant.length) return null;
+  if (!past.length) return null;
 
-  const last = relevant[0];
-  if (isDeload) return Math.round(last.weight * 0.6 * 2) / 2;
+  const lastDate = past[0].date;
+  const lastSession = past
+    .filter(l => l.date === lastDate)
+    .sort((a, b) => a.setNumber - b.setNumber);
 
-  const { min, max } = parseRepRange(exercise.reps);
+  const sameSet = lastSession.find(l => l.setNumber === setIdx + 1);
+  const baseWeight = sameSet ? sameSet.weight : lastSession[lastSession.length - 1].weight;
+  if (isDeload) return Math.round(baseWeight * 0.6 * 2) / 2;
+
   const step = exercise.equipment === 'Bodyweight' ? 0 : 2.5;
-  let weight = last.weight;
+  const finalSet = lastSession[lastSession.length - 1];
+  const anyHard = lastSession.some(l => l.feedback === 'hard');
 
-  if (step > 0 && (last.feedback === 'easy' || last.reps >= max)) {
-    weight = Math.round((last.weight + step) * 2) / 2;
-  } else if (step > 0 && (last.feedback === 'hard' || last.reps < min)) {
-    weight = Math.max(0, Math.round((last.weight - step) * 2) / 2);
+  let weight = baseWeight;
+  if (step > 0 && finalSet.feedback === 'easy' && !anyHard) {
+    weight = Math.round((baseWeight + step) * 2) / 2;
+  } else if (step > 0 && anyHard) {
+    weight = Math.max(0, Math.round((baseWeight - step) * 2) / 2);
   }
 
   return weight;
 }
 
-function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved }) {
+function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved, aiSuggestion, aiLoading }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
   const today = toLocalDateKey();
@@ -761,6 +816,8 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
       Alert.alert('Missing info', requiresWeight ? 'Enter weight and reps to log this set.' : 'Enter reps to log this set.');
       return;
     }
+    const isAmrap = idx === sets.length - 1;
+    const feedback = deriveFeedback(set.reps, exercise.reps, isAmrap);
     const logKey = `${today}:${exercise.id}:${idx + 1}`;
     dispatch({
       type: 'LOG_SET',
@@ -771,10 +828,10 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         setNumber: idx + 1,
         weight: w,
         reps: r,
-        feedback: set.feedback || 'good',
+        feedback,
       },
     });
-    onSetsChange(sets.map((s, i) => i === idx ? { ...s, saved: true } : s));
+    onSetsChange(sets.map((s, i) => i === idx ? { ...s, saved: true, feedback } : s));
     if (onSetSaved) {
       const label = w === 0 ? `BW · ${r} reps` : `${w} kg · ${r} reps`;
       onSetSaved(`Set ${idx + 1} logged: ${label}`, () => {
@@ -784,7 +841,9 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
     }
   }
 
-  const targetReps = exercise.reps ? exercise.reps.split(/[–\-]/)[0].trim() : '10';
+  const { min: repMin, max: repMax } = parseRepRange(exercise.reps);
+  const repTop = isFinite(repMax) ? repMax : repMin;
+  const lastSetIdx = sets.length - 1;
 
   const FEEL_ICONS = { easy: '🟢', good: '🔵', hard: '🔴' };
 
@@ -808,21 +867,42 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         </View>
       )}
 
+      {/* AI suggestion banner */}
+      {aiLoading ? (
+        <View style={sl.aiBanner}>
+          <ActivityIndicator size="small" color={colors.accentLight} />
+          <Text style={sl.aiBannerText}>AI analysing your history…</Text>
+        </View>
+      ) : aiSuggestion ? (
+        <View style={sl.aiBanner}>
+          <Text style={sl.aiSpark}>✦</Text>
+          <Text style={sl.aiBannerText}>
+            <Text style={sl.aiBannerStrong}>AI suggests {aiSuggestion.weight}kg</Text>
+            {aiSuggestion.reason ? ` · ${aiSuggestion.reason}` : ''}
+          </Text>
+        </View>
+      ) : null}
+
       {/* Header row */}
       <View style={sl.tableHeader}>
         <View style={sl.colNum} />
         <Text style={[sl.colWeight, sl.colLabel]}>WEIGHT</Text>
         <Text style={[sl.colReps, sl.colLabel]}>REPS</Text>
-        <Text style={[sl.colFeel, sl.colLabel]}>FEEL</Text>
+        <Text style={[sl.colFeel, sl.colLabel]}>RESULT</Text>
         <View style={sl.colSave} />
       </View>
 
       {sets.map((set, idx) => {
-        const suggestion = getProgressionSuggestion(setLogs, exercise, idx, today, isDeload);
+        const ruleSuggestion = getProgressionSuggestion(setLogs, exercise, idx, today, isDeload);
+        // AI weight (whole-exercise) takes priority over the per-set rule fallback.
+        const suggestion = aiSuggestion?.weight != null ? aiSuggestion.weight : ruleSuggestion;
+        const isAmrap = idx === lastSetIdx;
+        const repsPlaceholder = isAmrap ? `${repTop}+` : String(repTop);
+        const outcome = set.saved ? OUTCOME[set.feedback] : null;
         return (
           <View key={idx} style={[sl.row, set.saved && sl.rowSaved]}>
             {/* Set number */}
-            <View style={[sl.colNum, sl.numCircle, set.saved && sl.numCircleDone]}>
+            <View style={[sl.colNum, sl.numCircle, set.saved && sl.numCircleDone, isAmrap && !set.saved && sl.numCircleAmrap]}>
               <Text style={[sl.numText, set.saved && sl.numTextDone]}>{idx + 1}</Text>
             </View>
 
@@ -852,26 +932,25 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
                 value={set.reps}
                 onChangeText={v => setField(idx, 'reps', v)}
                 keyboardType="number-pad"
-                placeholder={targetReps}
+                placeholder={repsPlaceholder}
                 placeholderTextColor={colors.textMuted}
               />
             )}
 
-            {/* Feel */}
-            {set.saved ? (
-              <View style={[sl.colFeel, { justifyContent: 'center' }]}>
-                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            {/* Result — auto-rated from reps after save, AMRAP hint before */}
+            {set.saved && outcome ? (
+              <View style={[sl.colFeel, sl.outcomeWrap]}>
+                <View style={[sl.outcomeChip, { backgroundColor: outcome.color + '22', borderColor: outcome.color + '55' }]}>
+                  <Ionicons name={outcome.icon} size={11} color={outcome.color} />
+                  <Text style={[sl.outcomeText, { color: outcome.color }]}>{outcome.label}</Text>
+                </View>
+              </View>
+            ) : isAmrap ? (
+              <View style={[sl.colFeel, sl.outcomeWrap]}>
+                <Text style={sl.maxHint}>MAX SET</Text>
               </View>
             ) : (
-              <View style={[sl.colFeel, sl.feelRow]}>
-                {FEEL_OPTIONS.map(({ key, color }) => (
-                  <TouchableOpacity
-                    key={key}
-                    style={[sl.feelDot, { backgroundColor: set.feedback === key ? color : color + '35' }]}
-                    onPress={() => setField(idx, 'feedback', key)}
-                  />
-                ))}
-              </View>
+              <View style={sl.colFeel} />
             )}
 
             {/* Save / Edit */}
@@ -889,15 +968,14 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         );
       })}
 
-      {/* Legend */}
-      <View style={sl.legend}>
-        {FEEL_OPTIONS.map(({ key, color, label }) => (
-          <View key={key} style={sl.legendItem}>
-            <View style={[sl.legendDot, { backgroundColor: color }]} />
-            <Text style={sl.legendText}>{label}</Text>
-          </View>
-        ))}
-        <Text style={sl.legendNote}>· affects next session suggestion</Text>
+      {/* How it works */}
+      <View style={sl.helpBox}>
+        <Ionicons name="flash" size={13} color={colors.accentLight} style={{ marginTop: 1 }} />
+        <Text style={sl.helpText}>
+          Hit the target reps on your working sets. On the <Text style={sl.helpStrong}>last set go to max</Text> —
+          as many clean reps as you can. We read your effort from the count, so there's no “easy/hard” to guess:
+          reach {repTop}+ and the weight goes up next time, fall short and it eases off.
+        </Text>
       </View>
     </View>
   );
@@ -1148,6 +1226,7 @@ const sl = StyleSheet.create({
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
   },
   numCircleDone: { backgroundColor: colors.success + '20', borderColor: colors.success + '60' },
+  numCircleAmrap: { borderColor: colors.accentLight, borderWidth: 1.5 },
   numText: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
   numTextDone: { color: colors.success },
   inputBox: {
@@ -1158,16 +1237,22 @@ const sl = StyleSheet.create({
   },
   unitText: { fontSize: 10, color: colors.textMuted },
   savedVal: { fontSize: 13, color: colors.success, fontWeight: '700', textAlign: 'center' },
-  feelRow: { flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center' },
-  feelDot: { width: 16, height: 16, borderRadius: 8 },
   saveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   saveBtnDone: { backgroundColor: colors.success + '40' },
   editBtnSaved: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  legend: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 10, color: colors.textMuted },
-  legendNote: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
+  outcomeWrap: { justifyContent: 'center' },
+  outcomeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1,
+  },
+  outcomeText: { fontSize: 10, fontWeight: '700' },
+  maxHint: { fontSize: 9, color: colors.accentLight, fontWeight: '800', letterSpacing: 0.5 },
+  helpBox: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  helpText: { flex: 1, fontSize: 11, color: colors.textMuted, lineHeight: 17 },
+  helpStrong: { color: colors.accentLight, fontWeight: '700' },
   lastSession: {
     backgroundColor: colors.surface, borderRadius: 10, padding: 10,
     marginBottom: 12, borderWidth: 1, borderColor: colors.border,
@@ -1178,4 +1263,13 @@ const sl = StyleSheet.create({
   lastSessionSetNum: { fontSize: 11, color: colors.textMuted, width: 36 },
   lastSessionVal: { fontSize: 12, color: colors.textSec, fontWeight: '600', flex: 1 },
   lastSessionFeel: { fontSize: 12 },
+  aiBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.accentDim + '55', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10,
+    borderWidth: 1, borderColor: colors.accent + '40',
+  },
+  aiSpark: { fontSize: 13, color: colors.accentLight },
+  aiBannerText: { flex: 1, fontSize: 11, color: colors.textSec, lineHeight: 16 },
+  aiBannerStrong: { color: colors.accentLight, fontWeight: '700' },
 });

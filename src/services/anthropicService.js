@@ -3,6 +3,79 @@ import { daysBetweenLocalDateKeys, toLocalDateKey } from '../utils/date';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
+// Returns { suggestions: [{ id, weight, reason }] } or null on failure/no key.
+// Called once per session load. Reads the flat setLogs model:
+// each log is { date, exerciseId, exerciseName, setNumber, weight, reps, feedback }.
+// weight is null in the response when an exercise has no history yet.
+export async function getWorkoutSuggestions(exercises, setLogs, userProfile, apiKey) {
+  if (!apiKey || !exercises?.length) return null;
+  const logs = setLogs || [];
+
+  // Build a compact per-exercise history block (last 5 sessions, newest first)
+  const historyBlock = exercises.map(ex => {
+    const byDate = {};
+    logs
+      .filter(l => l.exerciseId === ex.id)
+      .forEach(l => { (byDate[l.date] = byDate[l.date] || []).push(l); });
+
+    const sessions = Object.keys(byDate)
+      .sort((a, b) => b.localeCompare(a))
+      .slice(0, 5)
+      .map(date => {
+        const setsStr = byDate[date]
+          .sort((a, b) => a.setNumber - b.setNumber)
+          .map(s => `${s.weight === 0 ? 'BW' : `${s.weight}kg`}×${s.reps}(${s.feedback || '?'})`)
+          .join(', ');
+        return `  ${date}: ${setsStr || 'no data'}`;
+      });
+
+    return `${ex.name} [id:${ex.id}] target:${ex.reps}reps\n${sessions.length ? sessions.join('\n') : '  No history yet'}`;
+  }).join('\n\n');
+
+  const prompt = `You are a strength coach AI. Suggest the optimal starting weight for each exercise in today's session based on the athlete's history.
+
+Athlete: ${userProfile.fitnessLevel || 'beginner'} level, goals: ${(userProfile.goals || []).join('/')}, bodyweight: ${userProfile.weight ?? '?'}kg
+
+${historyBlock}
+
+Reply with ONLY valid JSON, no other text:
+{"suggestions":[{"id":"<exercise_id>","weight":<number or null>,"reason":"<8 words max>"}]}
+
+Rules:
+- weight must be null if there is no history (first session)
+- Round suggested weight to nearest 0.5kg
+- If last session sets were mostly "easy", increase by 5-10%
+- If last session sets were mostly "hard", decrease by 5%
+- If mixed or "good", small increase (~2.5%) if positive multi-session trend, otherwise maintain
+- Base suggestion on actual logged weights, not assumptions
+- Bodyweight (BW) exercises should return weight null`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data.content?.[0]?.text?.trim() || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    return parsed?.suggestions?.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildSystemPrompt(userProfile, generatedPlan, progress) {
   if (!userProfile || !userProfile.name) {
     return `You are a personal trainer. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
