@@ -232,7 +232,7 @@ export default function OnboardingScreen() {
             {step === TOTAL_STEPS - 1 ? 'Generate My Plan ✨' : 'Continue'}
           </Text>
           {step < TOTAL_STEPS - 1 && (
-            <Ionicons name="chevron-forward" size={18} color={colors.white} style={{ marginLeft: 4 }} />
+            <Ionicons name="chevron-forward" size={18} color={colors.onAccent} style={{ marginLeft: 4 }} />
           )}
         </TouchableOpacity>
       </View>
@@ -621,7 +621,7 @@ const s = StyleSheet.create({
     borderColor: colors.accent,
   },
   selectChipText: { fontSize: 14, color: colors.textSec, fontWeight: '600' },
-  selectChipTextActive: { color: colors.white },
+  selectChipTextActive: { color: colors.onAccent },
 
   listItem: {
     flexDirection: 'row',
@@ -674,7 +674,7 @@ const s = StyleSheet.create({
     borderColor: colors.accent,
   },
   goalChipText: { fontSize: 11, color: colors.textSec, fontWeight: '600', textAlign: 'center' },
-  goalChipTextActive: { color: colors.white },
+  goalChipTextActive: { color: colors.onAccent },
   primaryBadge: {
     position: 'absolute',
     top: 6,
@@ -712,7 +712,7 @@ const s = StyleSheet.create({
     borderColor: colors.accent,
   },
   numChipText: { fontSize: 18, color: colors.textSec, fontWeight: '700' },
-  numChipTextActive: { color: colors.white },
+  numChipTextActive: { color: colors.onAccent },
 
   dayChip: {
     paddingHorizontal: 10,
@@ -771,5 +771,5 @@ const s = StyleSheet.create({
     gap: 4,
   },
   nextBtnDisabled: { opacity: 0.45 },
-  nextBtnText: { fontSize: 15, color: colors.white, fontWeight: '700' },
+  nextBtnText: { fontSize: 15, color: colors.onAccent, fontWeight: '700' },
 });

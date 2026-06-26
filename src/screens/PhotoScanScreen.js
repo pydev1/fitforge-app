@@ -136,8 +136,8 @@ export default function PhotoScanScreen({ navigation }) {
         {!imageUri ? (
           <View style={s.pickRow}>
             <TouchableOpacity style={s.pickBtn} onPress={takePhoto}>
-              <Ionicons name="camera" size={22} color={colors.white} />
-              <Text style={s.pickBtnText}>Take Photo</Text>
+              <Ionicons name="camera" size={22} color={colors.onAccent} />
+              <Text style={[s.pickBtnText, { color: colors.onAccent }]}>Take Photo</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.pickBtn, s.pickBtnSecondary]} onPress={pickFromGallery}>
               <Ionicons name="images-outline" size={22} color={colors.accentLight} />

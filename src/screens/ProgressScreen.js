@@ -18,13 +18,13 @@ const CHART_CONFIG = {
   backgroundGradientTo: colors.surface,
   backgroundGradientFromOpacity: 1,
   backgroundGradientToOpacity: 1,
-  color: (opacity = 1) => `rgba(40, 120, 216, ${opacity})`,
+  color: (opacity = 1) => `rgba(190, 242, 100, ${opacity})`,
   labelColor: () => colors.textMuted,
   strokeWidth: 2.5,
   propsForDots: {
     r: '4',
     strokeWidth: '2',
-    stroke: '#2878d8',
+    stroke: '#BEF264',
     fill: colors.bg,
   },
   propsForBackgroundLines: {
@@ -113,14 +113,19 @@ export default function ProgressScreen() {
   const setLogs = progress.setLogs || [];
   const streak = getStreak(progress.completedWorkouts);
   const totalWorkouts = progress.completedWorkouts.length;
-  const lastWeight = progress.weight[progress.weight.length - 1];
-  const firstWeight = progress.weight[0];
-  const weightDelta = lastWeight && firstWeight
+
+  // Always derive first/last by DATE — never trust array index, since older
+  // data may be stored unsorted. This makes "since you started" trustworthy.
+  const weightEntries = [...progress.weight].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const waistEntries = [...progress.waist].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const firstWeight = weightEntries[0];
+  const lastWeight = weightEntries[weightEntries.length - 1];
+  const weightDelta = lastWeight && firstWeight && weightEntries.length >= 2
     ? (lastWeight.value - firstWeight.value).toFixed(1)
     : null;
-  const lastWaist = progress.waist[progress.waist.length - 1];
-  const firstWaist = progress.waist[0];
-  const waistDelta = lastWaist && firstWaist
+  const firstWaist = waistEntries[0];
+  const lastWaist = waistEntries[waistEntries.length - 1];
+  const waistDelta = lastWaist && firstWaist && waistEntries.length >= 2
     ? (lastWaist.value - firstWaist.value).toFixed(1)
     : null;
   const targetWaist = 80;
@@ -129,8 +134,8 @@ export default function ProgressScreen() {
   const todayWaistEntry = progress.waist.find(w => w.date === today);
   const hasExistingToday = !!(todayWeightEntry || todayWaistEntry);
 
-  const weightChartData = progress.weight.length >= 2 ? buildChartData(progress.weight) : null;
-  const waistChartData = progress.waist.length >= 2 ? buildChartData(progress.waist, 6) : null;
+  const weightChartData = weightEntries.length >= 2 ? buildChartData(weightEntries) : null;
+  const waistChartData = waistEntries.length >= 2 ? buildChartData(waistEntries, 6) : null;
 
   const recentPR = getMostRecentPR(setLogs);
 
@@ -173,6 +178,21 @@ export default function ProgressScreen() {
     setLogModal(false);
   }
 
+  function deleteEntry(kind, date, value, unit) {
+    Alert.alert(
+      'Delete this entry?',
+      `Remove ${value} ${unit} logged on ${date}? This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => dispatch({ type: kind === 'weight' ? 'REMOVE_WEIGHT' : 'REMOVE_WAIST', payload: date }),
+        },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
@@ -188,7 +208,7 @@ export default function ProgressScreen() {
           </View>
           {(weightChartData || waistChartData) && (
             <TouchableOpacity style={s.logBtn} onPress={() => setLogModal(true)}>
-              <Ionicons name="add" size={18} color={colors.white} />
+              <Ionicons name="add" size={18} color={colors.onAccent} />
               <Text style={s.logBtnText}>Log</Text>
             </TouchableOpacity>
           )}
@@ -226,7 +246,7 @@ export default function ProgressScreen() {
         {recentPR && (
           <View style={s.prCard}>
             <View style={s.prIconWrap}>
-              <Ionicons name="trophy" size={20} color="#b8dcf8" />
+              <Ionicons name="trophy" size={20} color={colors.accentLight} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.prTitle}>You hit a PR on {formatPRDate(recentPR.date)}</Text>
@@ -244,7 +264,7 @@ export default function ProgressScreen() {
               Log your first weight and waist measurement to start tracking progress
             </Text>
             <TouchableOpacity style={s.inlineLogBtn} onPress={() => setLogModal(true)}>
-              <Ionicons name="add" size={16} color={colors.white} style={{ marginRight: 4 }} />
+              <Ionicons name="add" size={16} color={colors.onAccent} style={{ marginRight: 4 }} />
               <Text style={s.inlineLogBtnText}>Log now</Text>
             </TouchableOpacity>
           </View>
@@ -304,8 +324,8 @@ export default function ProgressScreen() {
                   height={160}
                   chartConfig={{
                     ...CHART_CONFIG,
-                    color: (opacity = 1) => `rgba(255, 87, 34, ${opacity})`,
-                    propsForDots: { ...CHART_CONFIG.propsForDots, stroke: colors.accent },
+                    color: (opacity = 1) => `rgba(34, 211, 238, ${opacity})`,
+                    propsForDots: { ...CHART_CONFIG.propsForDots, stroke: colors.info },
                   }}
                   bezier
                   style={s.chart}
@@ -399,6 +419,35 @@ export default function ProgressScreen() {
             <TouchableOpacity style={s.saveBtn} onPress={saveLog}>
               <Text style={s.saveBtnText}>Save entry</Text>
             </TouchableOpacity>
+
+            {(weightEntries.length > 0 || waistEntries.length > 0) && (
+              <View style={s.histWrap}>
+                <Text style={s.histHeading}>Logged history</Text>
+                <Text style={s.histHint}>Tap 🗑 to remove a wrong entry — your "since you started" numbers use the earliest one.</Text>
+                <ScrollView style={s.histScroll} showsVerticalScrollIndicator={false}>
+                  {weightEntries.length > 0 && <Text style={s.histSubhead}>Weight</Text>}
+                  {[...weightEntries].reverse().map(e => (
+                    <View key={`w-${e.date}`} style={s.histRow}>
+                      <Text style={s.histDate}>{e.date}</Text>
+                      <Text style={s.histVal}>{e.value} kg</Text>
+                      <TouchableOpacity onPress={() => deleteEntry('weight', e.date, e.value, 'kg')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={16} color={colors.secondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {waistEntries.length > 0 && <Text style={s.histSubhead}>Waist</Text>}
+                  {[...waistEntries].reverse().map(e => (
+                    <View key={`wa-${e.date}`} style={s.histRow}>
+                      <Text style={s.histDate}>{e.date}</Text>
+                      <Text style={s.histVal}>{e.value} cm</Text>
+                      <TouchableOpacity onPress={() => deleteEntry('waist', e.date, e.value, 'cm')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={16} color={colors.secondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -521,7 +570,7 @@ function StrengthProgress({ setLogs }) {
   );
 }
 
-const FEEL_COLORS = { easy: '#22c55e', good: '#3b82f6', hard: '#ef4444' };
+const FEEL_COLORS = { easy: '#34D399', good: '#22D3EE', hard: '#FB7185' };
 
 function EmptyChart({ message }) {
   return (
@@ -571,7 +620,7 @@ const s = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 4,
     marginTop: 4,
   },
-  logBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.white },
+  logBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.onAccent },
 
   statRow: {
     flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 4, gap: 10,
@@ -597,18 +646,18 @@ const s = StyleSheet.create({
 
   prCard: {
     marginHorizontal: 20, marginTop: 14,
-    backgroundColor: colors.heroCardDeep || '#0e1e40',
+    backgroundColor: colors.heroCardDeep,
     borderRadius: 18, padding: 16,
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderWidth: 1, borderColor: '#2264c8' + '60',
+    borderWidth: 1, borderColor: colors.accent + '55',
   },
   prIconWrap: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: 'rgba(40,100,200,0.3)',
+    backgroundColor: 'rgba(190,242,100,0.16)',
     alignItems: 'center', justifyContent: 'center',
   },
-  prTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: '#f0f8ff', marginBottom: 3 },
-  prSub: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: '#b8dcf8' },
+  prTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text, marginBottom: 3 },
+  prSub: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.heroTextSec },
 
   chartCard: {
     marginHorizontal: 20, marginTop: 14,
@@ -630,7 +679,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.accent, borderRadius: 20,
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  inlineLogBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.white },
+  inlineLogBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.onAccent },
   inlineEmpty: {
     paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
@@ -675,7 +724,19 @@ const s = StyleSheet.create({
     backgroundColor: colors.accent, borderRadius: 14,
     paddingVertical: 15, alignItems: 'center', marginTop: 4,
   },
-  saveBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.white },
+  saveBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.onAccent },
+
+  histWrap: { marginTop: 18, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
+  histHeading: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.text, marginBottom: 4 },
+  histHint: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textMuted, lineHeight: 16, marginBottom: 8 },
+  histScroll: { maxHeight: 180 },
+  histSubhead: { fontFamily: 'Figtree_700Bold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },
+  histRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10,
+  },
+  histDate: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textMuted, width: 92 },
+  histVal: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text, flex: 1 },
 });
 
 const sp = StyleSheet.create({

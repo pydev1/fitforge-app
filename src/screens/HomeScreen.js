@@ -39,9 +39,20 @@ function getNextWorkout(generatedPlan) {
     next.setDate(today.getDate() + i);
     const dayName = DAYS[next.getDay()];
     const workoutId = generatedPlan.schedule?.[dayName];
-    if (workoutId) return generatedPlan.workouts?.[workoutId] ?? null;
+    if (workoutId) {
+      const workout = generatedPlan.workouts?.[workoutId];
+      if (workout) return { workout, daysUntil: i, dayName };
+    }
   }
   return null;
+}
+
+// "tomorrow" only when it's literally the next day; otherwise name the day so a
+// rest day in between never gets mislabeled (e.g. "on Thursday", "next Monday").
+function whenLabel(daysUntil, dayName) {
+  if (daysUntil === 1) return 'tomorrow';
+  if (daysUntil >= 7) return `next ${dayName}`;
+  return `on ${dayName}`;
 }
 
 function getStreak(completedWorkouts) {
@@ -169,9 +180,13 @@ export default function HomeScreen({ navigation }) {
     ? (generatedPlan?.workouts?.[lastCompletedWorkout.type]?.name || lastCompletedWorkout.type)
     : null;
 
-  const currentWeight = progress.weight[progress.weight.length - 1]?.value ?? userProfile.weight;
-  const firstWeight = progress.weight[0];
-  const weightDelta = progress.weight.length >= 2 && firstWeight && currentWeight != null
+  // Derive first/last by DATE (never trust array index — older data may be unsorted)
+  const weightByDate = [...progress.weight].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const waistByDate = [...(progress.waist || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  const currentWeight = weightByDate[weightByDate.length - 1]?.value ?? userProfile.weight;
+  const firstWeight = weightByDate[0];
+  const weightDelta = weightByDate.length >= 2 && firstWeight && currentWeight != null
     ? (currentWeight - firstWeight.value).toFixed(1)
     : null;
   const showWeightDelta = weightDelta !== null && parseFloat(weightDelta) !== 0;
@@ -179,8 +194,8 @@ export default function HomeScreen({ navigation }) {
   const totalWorkouts = progress.completedWorkouts.length;
   const streak = getStreak(progress.completedWorkouts);
 
-  const currentWaist = progress.waist?.[progress.waist.length - 1]?.value ?? userProfile.waist;
-  const startWaist = progress.waist?.[0]?.value ?? userProfile.waist;
+  const currentWaist = waistByDate[waistByDate.length - 1]?.value ?? userProfile.waist;
+  const startWaist = waistByDate[0]?.value ?? userProfile.waist;
   const targetWaist = 80;
 
   const waistProgress = startWaist && currentWaist && startWaist > targetWaist
@@ -313,7 +328,7 @@ export default function HomeScreen({ navigation }) {
                 {nextWorkout && (
                   <View style={s.ctaRestInfo}>
                     <Text style={s.ctaRestInfoLabel}>Next up  </Text>
-                    <Text style={s.ctaRestInfoText}>{nextWorkout.name}</Text>
+                    <Text style={s.ctaRestInfoText}>{nextWorkout.workout.name} · {whenLabel(nextWorkout.daysUntil, nextWorkout.dayName)}</Text>
                   </View>
                 )}
               </View>
@@ -325,7 +340,7 @@ export default function HomeScreen({ navigation }) {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={s.ctaDoneTitle}>✓ {todayWorkout.name} — done today</Text>
                 {nextWorkout && (
-                  <Text style={s.ctaDoneNext}>Next up: {nextWorkout.name} tomorrow</Text>
+                  <Text style={s.ctaDoneNext}>Next up: {nextWorkout.workout.name} {whenLabel(nextWorkout.daysUntil, nextWorkout.dayName)}</Text>
                 )}
               </View>
             </View>
@@ -344,8 +359,8 @@ export default function HomeScreen({ navigation }) {
                 onPress={() => navigation.navigate('Workouts', { tab: 'today' })}
                 activeOpacity={0.85}
               >
-                <Text style={s.beginBtnText}>Begin</Text>
-                <Ionicons name="arrow-forward" size={16} color="#fff" />
+                <Text style={[s.beginBtnText, { color: colors.onAccent }]}>Begin</Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.onAccent} />
               </TouchableOpacity>
             </>
           )}
@@ -523,7 +538,7 @@ const s = StyleSheet.create({
     fontSize: 8,
     color: colors.heroTextMuted,
   },
-  weekSquareLabelActive: { color: '#fff' },
+  weekSquareLabelActive: { color: colors.onAccent },
 
   // Fix 2: blue fill, dark unfilled track
   journeyWrap: { marginBottom: 14 },
@@ -539,14 +554,14 @@ const s = StyleSheet.create({
   },
   journeyTrack: {
     height: 5,
-    backgroundColor: '#2e3a60',
+    backgroundColor: '#0B141B',
     borderRadius: 3,
     overflow: 'visible',
     position: 'relative',
   },
   journeyFill: {
     height: '100%',
-    backgroundColor: '#72aed4',
+    backgroundColor: colors.info,
     borderRadius: 3,
   },
   journeyDot: {
@@ -554,7 +569,7 @@ const s = StyleSheet.create({
     top: -4,
     width: 13, height: 13,
     borderRadius: 7,
-    backgroundColor: '#72aed4',
+    backgroundColor: colors.info,
     borderWidth: 2,
     borderColor: colors.heroCard,
     marginLeft: -6,

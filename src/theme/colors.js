@@ -1,45 +1,47 @@
 export const colors = {
-  // 4-tier background depth
-  bg: '#1e2540',           // page canvas
-  surface: '#222840',      // subtle surface / section fills
-  card: '#2e3a60',         // elevated cards
-  cardHigh: '#384878',     // highest surface
-  ctaCard: '#182038',      // CTA card – keep dark for orange contrast
+  // ── VOLT — athletic dark ──────────────────────────────────────────
+  // Near-black background depth tiers
+  bg: '#0D0F14',           // page canvas (near-black)
+  surface: '#161922',      // subtle surface / section fills
+  card: '#1E222E',         // elevated cards
+  cardHigh: '#28303F',     // highest surface
+  ctaCard: '#12151C',      // CTA card — kept dark so the lime accent pops
 
-  // Blue hero card
-  heroCard: '#1a52a8',
-  heroCardBorder: '#2264c8',
-  heroCardDeep: '#0e1e40',
-  heroCardDeepAlt: '#0e1e40',
+  // Hero card — cyan-tinted dark feature panel
+  heroCard: '#13202A',
+  heroCardBorder: '#1F3D49',
+  heroCardDeep: '#0B141B',
+  heroCardDeepAlt: '#0B141B',
 
-  // Text on blue hero card
-  heroText: '#f0f8ff',
-  heroTextSec: '#b8dcf8',
-  heroTextMuted: '#80b8f0',
+  // Text on the hero card (cyan family)
+  heroText: '#EAF8FB',
+  heroTextSec: '#7FD9E6',
+  heroTextMuted: '#5E8A94',
 
   // Text on dark surfaces
-  text: '#f4f8ff',
-  textSec: '#b8c8e0',
-  textMuted: '#8098b8',
+  text: '#F4F7FB',
+  textSec: '#AEB8C8',
+  textMuted: '#8A93A6',
 
-  // Stat card (bright blue)
-  statCard: '#2878d8',
-  statCardBorder: '#1a5cb0',
+  // Stat highlight tile (electric cyan)
+  statCard: '#0E7490',
+  statCardBorder: '#155E75',
 
-  // Action colour — buttons and live pip ONLY, never background
-  accent: '#ff5722',
-  accentLight: '#ff7848',
+  // Action colour — VOLT LIME. Buttons / active / pips / rings ONLY, never bg.
+  accent: '#BEF264',
+  accentLight: '#D4FA7C',
+  onAccent: '#0B0D11',     // text + icons that sit ON the lime accent
 
   // Supporting
-  border: '#2a3560',
-  borderSubtle: '#232d52',
-  success: '#10B981',
-  warning: '#F59E0B',
-  info: '#3B82F6',
+  border: '#262C38',
+  borderSubtle: '#1C212B',
+  success: '#34D399',
+  warning: '#FBBF24',
+  info: '#22D3EE',         // electric cyan (second accent)
   white: '#FFFFFF',
 
   // Keep legacy aliases so untouched screens don't break
-  accentDim: '#2e3a60',
-  secondary: '#F43F5E',
-  secondaryDim: '#881337',
+  accentDim: '#1B2417',    // dark lime-tinted chip fill (used with opacity suffixes)
+  secondary: '#FB7185',    // coral-red — negative / "tough" signal
+  secondaryDim: '#4C1D24',
 };

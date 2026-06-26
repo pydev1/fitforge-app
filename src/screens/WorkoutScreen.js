@@ -174,7 +174,9 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   // Fetch AI starting-weight suggestions once per session load (gated on API key).
   // Completed sets are never overwritten — suggestions only feed input placeholders.
   React.useEffect(() => {
-    if (!workout?.exercises?.length || !state.apiKey) {
+    // On deload weeks the app enforces a deterministic lighter load (≈60%),
+    // so skip the AI call entirely — it must not override the recovery week.
+    if (!workout?.exercises?.length || !state.apiKey || mod.isDeload) {
       setAiSuggestions({});
       setAiLoading(false);
       return;
@@ -193,8 +195,8 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
       .catch(() => {})
       .finally(() => { if (!cancelled) setAiLoading(false); });
     return () => { cancelled = true; };
-    // Re-run only when the workout or key changes — not on every set log.
-  }, [workout?.id, state.apiKey]);
+    // Re-run only when the workout, key, or deload state changes — not on every set log.
+  }, [workout?.id, state.apiKey, mod.isDeload]);
 
   function getSetData(exercise) {
     const setLogs = state.progress.setLogs || [];
@@ -351,7 +353,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         onPress={handleComplete}
         activeOpacity={0.8}
       >
-        <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color="#fff" />
+        <Ionicons name={isDone ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color={colors.onAccent} />
         <Text style={s.completeBtnText}>{isDone ? 'Session Done ✓' : 'Done for Today'}</Text>
       </TouchableOpacity>
 
@@ -532,8 +534,8 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
       {/* Legend */}
       <View style={s.weekLegend}>
         {[
-          { color: '#22c55e', label: 'Done' },
-          { color: '#3b82f6', label: 'Upcoming' },
+          { color: '#34D399', label: 'Done' },
+          { color: '#22D3EE', label: 'Upcoming' },
           { color: '#4b5563', label: 'Rest' },
         ].map(({ color, label }) => (
           <View key={label} style={s.weekLegendItem}>
@@ -554,7 +556,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
         const isExpanded = expandedDay === day;
         const dayDate = weekDates[day];
         const isCompleted = completedWorkouts.some(w => w.date === dayDate);
-        const dotColor = !workout ? '#4b5563' : isCompleted ? '#22c55e' : '#3b82f6';
+        const dotColor = !workout ? '#4b5563' : isCompleted ? '#34D399' : '#22D3EE';
 
         return (
           <TouchableOpacity
@@ -867,8 +869,16 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         </View>
       )}
 
-      {/* AI suggestion banner */}
-      {aiLoading ? (
+      {/* Suggestion banner — deload takes priority (deterministic recovery load) */}
+      {isDeload ? (
+        <View style={sl.aiBanner}>
+          <Ionicons name="leaf" size={13} color={colors.success} />
+          <Text style={sl.aiBannerText}>
+            <Text style={[sl.aiBannerStrong, { color: colors.success }]}>Deload week — recover.</Text>
+            {' '}Suggested weights eased ~40%. Keep it light and clean.
+          </Text>
+        </View>
+      ) : aiLoading ? (
         <View style={sl.aiBanner}>
           <ActivityIndicator size="small" color={colors.accentLight} />
           <Text style={sl.aiBannerText}>AI analysing your history…</Text>
@@ -996,7 +1006,7 @@ const s = StyleSheet.create({
   tab: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
   tabActive: { backgroundColor: colors.accent },
   tabText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  tabTextActive: { color: '#fff' },
+  tabTextActive: { color: colors.onAccent },
   scroll: { flex: 1 },
 
   restContainer: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
@@ -1097,14 +1107,14 @@ const s = StyleSheet.create({
     marginTop: 16, marginBottom: 8, gap: 8,
   },
   completeBtnDone: { backgroundColor: colors.success },
-  completeBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+  completeBtnText: { fontSize: 15, color: colors.onAccent, fontWeight: '700' },
 
   toastWrap: {
     position: 'absolute', bottom: 16, left: 16, right: 16,
   },
   toastRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1a2848', borderRadius: 14,
+    backgroundColor: colors.cardHigh, borderRadius: 14,
     paddingLeft: 16, paddingRight: 6, paddingVertical: 12,
     borderWidth: 1, borderColor: colors.border,
     elevation: 8,
@@ -1115,7 +1125,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.accent, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 8, marginLeft: 10,
   },
-  toastUndoText: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  toastUndoText: { fontSize: 12, color: colors.onAccent, fontWeight: '700' },
   weekBanner: {
     backgroundColor: colors.card, borderRadius: 12, padding: 14,
     marginTop: 8, marginBottom: 10, borderWidth: 1, borderColor: colors.border,

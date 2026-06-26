@@ -78,6 +78,22 @@ function reducer(state, action) {
           waist: upsertByKey(state.progress.waist, action.payload, item => item.date),
         },
       };
+    case 'REMOVE_WEIGHT':
+      return {
+        ...state,
+        progress: {
+          ...state.progress,
+          weight: state.progress.weight.filter(w => w.date !== action.payload),
+        },
+      };
+    case 'REMOVE_WAIST':
+      return {
+        ...state,
+        progress: {
+          ...state.progress,
+          waist: state.progress.waist.filter(w => w.date !== action.payload),
+        },
+      };
     case 'LOG_WORKOUT':
       return {
         ...state,

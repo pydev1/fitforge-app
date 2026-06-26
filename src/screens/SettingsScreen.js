@@ -416,7 +416,7 @@ const s = StyleSheet.create({
   },
   title: { fontSize: 18, color: colors.text, fontWeight: '700' },
   saveBtn: { backgroundColor: colors.accent, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8 },
-  saveBtnText: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  saveBtnText: { fontSize: 13, color: colors.onAccent, fontWeight: '700' },
   note: { fontSize: 12, color: colors.textSec, lineHeight: 18, marginBottom: 12 },
   keyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
@@ -445,7 +445,7 @@ const s = StyleSheet.create({
   },
   numChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   numChipText: { fontSize: 18, color: colors.textSec, fontWeight: '700' },
-  numChipTextActive: { color: '#fff' },
+  numChipTextActive: { color: colors.onAccent },
   dayChip: {
     paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
     backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
@@ -487,7 +487,7 @@ const f = StyleSheet.create({
   chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipSmall: { paddingHorizontal: 10, paddingVertical: 6 },
   chipText: { fontSize: 12, color: colors.textSec, fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
+  chipTextActive: { color: colors.onAccent },
 });
 
 const ir = StyleSheet.create({

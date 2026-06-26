@@ -151,7 +151,7 @@ export default function CoachScreen({ navigation }) {
         <View style={s.header}>
           <View style={s.headerLeft}>
             <View style={s.avatar}>
-              <Ionicons name="person" size={18} color={colors.white} />
+              <Ionicons name="person" size={18} color={colors.onAccent} />
             </View>
             <View>
               <Text style={s.headerTitle}>Your Coach</Text>
@@ -248,8 +248,8 @@ export default function CoachScreen({ navigation }) {
             disabled={!input.trim() || isStreaming}
           >
             {isStreaming
-              ? <ActivityIndicator size="small" color={colors.white} />
-              : <Ionicons name="send" size={18} color={colors.white} />
+              ? <ActivityIndicator size="small" color={colors.onAccent} />
+              : <Ionicons name="send" size={18} color={colors.onAccent} />
             }
           </TouchableOpacity>
         </View>
@@ -353,7 +353,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 2,
   },
-  coachAvatarText: { fontSize: 9, color: colors.white, fontWeight: '700' },
+  coachAvatarText: { fontSize: 9, color: colors.onAccent, fontWeight: '700' },
   bubble: {
     maxWidth: '80%',
     borderRadius: 18,
@@ -371,7 +371,7 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   bubbleText: { fontSize: 14, lineHeight: 21 },
-  bubbleTextUser: { color: colors.white },
+  bubbleTextUser: { color: colors.onAccent },
   bubbleTextAI: { color: colors.text },
   typingBubble: { paddingVertical: 14 },
   dots: { flexDirection: 'row', gap: 5, alignItems: 'center' },
