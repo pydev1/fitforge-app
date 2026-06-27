@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
-import { getWorkoutSuggestions } from '../services/anthropicService';
+import { getWorkoutSuggestions, getExerciseAlternative } from '../services/anthropicService';
 import { colors } from '../theme/colors';
 
 const TABS = ['Today', 'Weekly', 'Posture Guide'];
@@ -31,12 +31,15 @@ function suggestWeight(weight, feedback) {
   return suggested > 0 ? String(suggested) : weight;
 }
 
-// Parse "8-12" or "12–15" into { min, max }. Returns null for duration targets.
+// Parse "8-12", "12–15", or "30-60 seconds" → { min, max, unit: 'reps'|'secs' }.
+// Returns null for unrecognised formats.
 function parseRepRange(str) {
-  const m = String(str || '').match(/(\d+)[-–](\d+)/);
-  if (m) return { min: parseInt(m[1]), max: parseInt(m[2]) };
-  const s = String(str || '').match(/^(\d+)$/);
-  if (s) { const n = parseInt(s[1]); return { min: n, max: n }; }
+  const raw = String(str || '');
+  const isDuration = /sec|min|hold/i.test(raw);
+  const m = raw.match(/(\d+)[-–](\d+)/);
+  if (m) return { min: parseInt(m[1]), max: parseInt(m[2]), unit: isDuration ? 'secs' : 'reps' };
+  const s = raw.match(/^(\d+)$/);
+  if (s) { const n = parseInt(s[1]); return { min: n, max: n, unit: 'reps' }; }
   return null;
 }
 
@@ -66,6 +69,32 @@ function getFeedbackIcon(feedback) {
   return 'ellipse-outline';
 }
 
+const MUSCLE_GROUPS = ['Chest', 'Shoulders', 'Back', 'Biceps', 'Triceps', 'Core', 'Lower Back', 'Quads', 'Hamstrings', 'Glutes'];
+
+const MUSCLE_KEYWORDS = {
+  Chest:       ['chest', 'pec'],
+  Shoulders:   ['shoulder', 'delt'],
+  Back:        ['back', 'lat', 'rhomboid'],
+  Biceps:      ['bicep'],
+  Triceps:     ['tricep'],
+  Core:        ['core', 'ab', 'oblique'],
+  'Lower Back':['lower back', 'erector', 'lumbar'],
+  Quads:       ['quad'],
+  Hamstrings:  ['hamstring'],
+  Glutes:      ['glute'],
+};
+
+function exerciseOverlaps(musclesStr, groups) {
+  if (!groups.length || !musclesStr) return false;
+  const lower = musclesStr.toLowerCase();
+  return groups.some(g => (MUSCLE_KEYWORDS[g] || []).some(kw => lower.includes(kw)));
+}
+
+function getOverlappingGroups(musclesStr) {
+  const lower = (musclesStr || '').toLowerCase();
+  return MUSCLE_GROUPS.filter(g => (MUSCLE_KEYWORDS[g] || []).some(kw => lower.includes(kw)));
+}
+
 export default function WorkoutScreen({ route }) {
   const { state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState(0);
@@ -74,6 +103,9 @@ export default function WorkoutScreen({ route }) {
   const [sessionSets, setSessionSets] = useState({});
   const [aiSuggestions, setAiSuggestions] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
+  const [soreGroups, setSoreGroups] = useState([]);
+  const [painGroups, setPainGroups] = useState([]);
+  const [alternatives, setAlternatives] = useState({});
 
   useEffect(() => {
     if (route?.params?.tab === 'posture') setActiveTab(2);
@@ -217,6 +249,34 @@ export default function WorkoutScreen({ route }) {
     Alert.alert('Session Complete! 💪', 'Great work — logged to your progress tracker.');
   }
 
+  function handleToggleSoreness(group) {
+    const isSore = soreGroups.includes(group);
+    const isPain = painGroups.includes(group);
+    if (!isSore && !isPain) {
+      setSoreGroups(prev => [...prev, group]);
+    } else if (isSore) {
+      setSoreGroups(prev => prev.filter(g => g !== group));
+      setPainGroups(prev => [...prev, group]);
+    } else {
+      setPainGroups(prev => prev.filter(g => g !== group));
+    }
+  }
+
+  function findAlternative(exercise) {
+    setAlternatives(prev => ({ ...prev, [exercise.id]: { loading: true, result: null } }));
+    getExerciseAlternative(exercise, painGroups, userProfile.equipment || [], userProfile, state.apiKey)
+      .then(result => setAlternatives(prev => ({ ...prev, [exercise.id]: { loading: false, result } })))
+      .catch(() => setAlternatives(prev => ({ ...prev, [exercise.id]: { loading: false, result: null } })));
+  }
+
+  function handleFlagPainful(exercise) {
+    const groups = getOverlappingGroups(exercise.muscles);
+    if (groups.length) {
+      setPainGroups(prev => [...new Set([...prev, ...groups])]);
+      setSoreGroups(prev => prev.filter(g => !groups.includes(g)));
+    }
+  }
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
@@ -257,6 +317,12 @@ export default function WorkoutScreen({ route }) {
               getPrevRef={getPrevSessionRef}
               aiSuggestions={aiSuggestions}
               aiLoading={aiLoading}
+              soreGroups={soreGroups}
+              painGroups={painGroups}
+              onToggleSoreness={handleToggleSoreness}
+              alternatives={alternatives}
+              onFindAlternative={findAlternative}
+              onFlagPainful={handleFlagPainful}
             />
           )}
           {activeTab === 1 && (
@@ -284,6 +350,8 @@ function TodayTab({
   onComplete, completedWorkouts, onInfo,
   sessionSets, onSetUpdate, getPrevRef,
   aiSuggestions, aiLoading,
+  soreGroups, painGroups, onToggleSoreness,
+  alternatives, onFindAlternative, onFlagPainful,
 }) {
   const today = new Date().toISOString().split('T')[0];
   const isDone = completedWorkouts.some(w => w.date === today);
@@ -312,6 +380,11 @@ function TodayTab({
 
   return (
     <View style={{ paddingHorizontal: 16 }}>
+      <SorenessCheckIn
+        soreGroups={soreGroups}
+        painGroups={painGroups}
+        onToggle={onToggleSoreness}
+      />
       <View style={[s.workoutHeader, { borderLeftColor: workout.color }]}>
         <View style={{ flex: 1 }}>
           <Text style={s.workoutDay}>{dayName}</Text>
@@ -359,6 +432,11 @@ function TodayTab({
           prevRef={getPrevRef(ex.id)}
           aiSuggestion={aiSuggestions[ex.id]}
           aiLoading={aiLoading}
+          soreGroups={soreGroups}
+          painGroups={painGroups}
+          alternativeInfo={alternatives[ex.id]}
+          onFindAlternative={() => onFindAlternative(ex)}
+          onFlagPainful={() => onFlagPainful(ex)}
         />
       ))}
 
@@ -387,12 +465,14 @@ function TodayTab({
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef, aiSuggestion, aiLoading }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets, onSetUpdate, prevRef, aiSuggestion, aiLoading, soreGroups = [], painGroups = [], alternativeInfo, onFindAlternative, onFlagPainful }) {
   const completedCount = sets.filter(s => s.completed).length;
   const allDone = completedCount === sets.length && sets.length > 0;
+  const isSore = exerciseOverlaps(exercise.muscles, soreGroups) && !exerciseOverlaps(exercise.muscles, painGroups);
+  const isPainful = exerciseOverlaps(exercise.muscles, painGroups);
 
   return (
-    <View style={[s.exCard, allDone && { borderColor: colors.success + '70' }]}>
+    <View style={[s.exCard, isPainful && { borderColor: colors.secondary + '80' }, !isPainful && allDone && { borderColor: colors.success + '70' }]}>
       <TouchableOpacity style={s.exCardTop} onPress={onToggle} activeOpacity={0.8}>
         <View style={[s.exColorBar, { backgroundColor: allDone ? colors.success : accentColor }]} />
         <View style={{ flex: 1 }}>
@@ -404,6 +484,16 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets,
             {allDone && (
               <View style={[s.chip, { backgroundColor: colors.success + '25', borderColor: colors.success + '50' }]}>
                 <Text style={[s.chipText, { color: colors.success }]}>Done ✓</Text>
+              </View>
+            )}
+            {isSore && (
+              <View style={[s.chip, { backgroundColor: colors.warning + '25', borderColor: colors.warning + '50' }]}>
+                <Text style={[s.chipText, { color: colors.warning }]}>⚠ Sore</Text>
+              </View>
+            )}
+            {isPainful && (
+              <View style={[s.chip, { backgroundColor: colors.secondary + '25', borderColor: colors.secondary + '50' }]}>
+                <Text style={[s.chipText, { color: colors.secondary }]}>✕ Painful</Text>
               </View>
             )}
           </View>
@@ -433,6 +523,43 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets,
                 <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
               </View>
             )}
+            {isPainful && (
+              <View style={s.painWarning}>
+                <View style={s.painWarningHeader}>
+                  <Ionicons name="warning" size={14} color={colors.secondary} />
+                  <Text style={s.painWarningTitle}>Exercise targets painful muscles</Text>
+                </View>
+                {alternativeInfo?.result ? (
+                  <View style={s.alternativeResult}>
+                    <Text style={s.alternativeName}>✓ {alternativeInfo.result.name}</Text>
+                    <Text style={s.alternativeMeta}>{alternativeInfo.result.muscles}</Text>
+                    <Text style={s.alternativeWhy}>{alternativeInfo.result.why}</Text>
+                    <Text style={s.alternativeHow}>{alternativeInfo.result.howTo}</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={s.findAltBtn}
+                    onPress={onFindAlternative}
+                    disabled={alternativeInfo?.loading}
+                    activeOpacity={0.7}
+                  >
+                    {alternativeInfo?.loading
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="swap-horizontal" size={14} color="#fff" />
+                    }
+                    <Text style={s.findAltBtnText}>
+                      {alternativeInfo?.loading ? 'Finding alternative...' : 'Find AI Alternative'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            {!isPainful && (
+              <TouchableOpacity style={s.flagPainBtn} onPress={onFlagPainful} activeOpacity={0.7}>
+                <Ionicons name="warning-outline" size={12} color={colors.textMuted} />
+                <Text style={s.flagPainText}>Flag as painful today</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Set tracker */}
@@ -454,6 +581,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, sets,
 /* ─── Set Tracker ───────────────────────────────────────────────── */
 
 function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor, aiSuggestion, aiLoading }) {
+  const isDuration = parseRepRange(exercise.reps)?.unit === 'secs';
   return (
     <View style={st.container}>
       <View style={st.header}>
@@ -481,7 +609,7 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor, aiSugge
       {/* Column labels */}
       <View style={st.colRow}>
         <Text style={[st.colLabel, { width: 42 }]}>SET</Text>
-        <Text style={[st.colLabel, { flex: 1 }]}>WEIGHT · REPS</Text>
+        <Text style={[st.colLabel, { flex: 1 }]}>{isDuration ? 'WEIGHT · SECS' : 'WEIGHT · REPS'}</Text>
         <Text style={[st.colLabel, { width: 60 }]}>FEEL</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -495,13 +623,24 @@ function SetTracker({ sets, exercise, onSetUpdate, prevRef, accentColor, aiSugge
           onUpdate={(field, val) => onSetUpdate(i, field, val)}
           accentColor={accentColor}
           targetReps={exercise.reps}
+          isDuration={isDuration}
         />
       ))}
 
       <View style={st.legend}>
-        <LegendItem color={colors.success} label="Reps ≥ top of range → Easy → weight up" />
-        <LegendItem color={colors.info}    label="Reps in middle → Good → weight stays" />
-        <LegendItem color={colors.secondary} label="Reps ≤ bottom → Hard → weight drops" />
+        {isDuration ? (
+          <>
+            <LegendItem color={colors.success} label="Hold ≥ top of range → Easy → add 5 secs next session" />
+            <LegendItem color={colors.info}    label="Hold in range → Good → maintain" />
+            <LegendItem color={colors.secondary} label="Hold ≤ bottom → Hard → shorter is fine" />
+          </>
+        ) : (
+          <>
+            <LegendItem color={colors.success} label="Reps ≥ top of range → Easy → weight up" />
+            <LegendItem color={colors.info}    label="Reps in middle → Good → weight stays" />
+            <LegendItem color={colors.secondary} label="Reps ≤ bottom → Hard → weight drops" />
+          </>
+        )}
       </View>
     </View>
   );
@@ -518,7 +657,7 @@ function LegendItem({ color, label }) {
 
 /* ─── Set Row ───────────────────────────────────────────────────── */
 
-function SetRow({ setNum, set, isNext, onUpdate, accentColor, targetReps }) {
+function SetRow({ setNum, set, isNext, onUpdate, accentColor, targetReps, isDuration }) {
   return (
     <View>
       <View style={[
@@ -561,7 +700,7 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor, targetReps }) {
               editable={!set.completed}
               selectTextOnFocus
             />
-            <Text style={sr.unitLabel}>reps</Text>
+            <Text style={sr.unitLabel}>{isDuration ? 'secs' : 'reps'}</Text>
           </View>
         </View>
 
@@ -658,6 +797,73 @@ function SetRow({ setNum, set, isNext, onUpdate, accentColor, targetReps }) {
           <Text style={[sr.suggestionHintText, { color: getFeedbackColor(set.feedback) }]}>
             {set.feedback === 'easy' ? 'Weight increased for next set' : 'Weight reduced for next set'}
           </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ─── Soreness Check-In ─────────────────────────────────────────── */
+
+function SorenessCheckIn({ soreGroups, painGroups, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const activeCount = soreGroups.length + painGroups.length;
+
+  return (
+    <View style={sc.card}>
+      <TouchableOpacity style={sc.header} onPress={() => setOpen(o => !o)} activeOpacity={0.8}>
+        <Ionicons name="body-outline" size={15} color={activeCount > 0 ? colors.warning : colors.textMuted} />
+        <Text style={[sc.title, activeCount > 0 && { color: colors.text }]}>Muscle Check-In</Text>
+        {activeCount > 0 && (
+          <View style={sc.badge}>
+            <Text style={sc.badgeText}>{activeCount}</Text>
+          </View>
+        )}
+        <Text style={sc.hint} numberOfLines={1}>
+          {activeCount > 0
+            ? `${soreGroups.length ? `${soreGroups.length} sore` : ''}${soreGroups.length && painGroups.length ? ' · ' : ''}${painGroups.length ? `${painGroups.length} painful` : ''}`
+            : 'Tap to flag sore or painful muscles'}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={colors.textMuted} />
+      </TouchableOpacity>
+
+      {open && (
+        <View style={sc.body}>
+          <Text style={sc.legend}>Tap once = sore (orange) · tap again = painful (red) · tap again = clear</Text>
+          <View style={sc.chips}>
+            {MUSCLE_GROUPS.map(group => {
+              const isSore = soreGroups.includes(group);
+              const isPain = painGroups.includes(group);
+              const color = isPain ? colors.secondary : isSore ? colors.warning : null;
+              return (
+                <TouchableOpacity
+                  key={group}
+                  style={[sc.chip, color && { backgroundColor: color + '22', borderColor: color + '70' }]}
+                  onPress={() => onToggle(group)}
+                  activeOpacity={0.7}
+                >
+                  {(isSore || isPain) && (
+                    <Ionicons name="warning" size={10} color={color} style={{ marginRight: 3 }} />
+                  )}
+                  <Text style={[sc.chipText, color && { color }]}>{group}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {activeCount > 0 && (
+            <View style={sc.summary}>
+              {soreGroups.length > 0 && (
+                <Text style={[sc.summaryLine, { color: colors.warning }]}>
+                  ⚠ Sore: {soreGroups.join(', ')} — train with caution
+                </Text>
+              )}
+              {painGroups.length > 0 && (
+                <Text style={[sc.summaryLine, { color: colors.secondary }]}>
+                  ✕ Painful: {painGroups.join(', ')} — consider alternatives
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -997,6 +1203,29 @@ const s = StyleSheet.create({
   },
   postureNoteText: { fontSize: 12, color: colors.accentLight, lineHeight: 18 },
 
+  painWarning: {
+    backgroundColor: colors.secondary + '15', borderRadius: 8, padding: 10,
+    borderLeftWidth: 3, borderLeftColor: colors.secondary, gap: 8,
+  },
+  painWarningHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  painWarningTitle: { fontSize: 12, color: colors.secondary, fontWeight: '700', flex: 1 },
+  findAltBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+    alignSelf: 'flex-start',
+  },
+  findAltBtnText: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  alternativeResult: { gap: 4 },
+  alternativeName: { fontSize: 13, color: colors.success, fontWeight: '700' },
+  alternativeMeta: { fontSize: 11, color: colors.textSec },
+  alternativeWhy: { fontSize: 11, color: colors.textMuted, fontStyle: 'italic' },
+  alternativeHow: { fontSize: 12, color: colors.textSec, lineHeight: 18 },
+  flagPainBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingVertical: 4, alignSelf: 'flex-start',
+  },
+  flagPainText: { fontSize: 11, color: colors.textMuted, textDecorationLine: 'underline' },
+
   completeBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 16,
@@ -1180,6 +1409,36 @@ const sr = StyleSheet.create({
     borderBottomColor: colors.border + '80',
   },
   suggestionHintText: { fontSize: 10, fontWeight: '600' },
+});
+
+/* ─── Soreness Styles ────────────────────────────────────────────── */
+
+const sc = StyleSheet.create({
+  card: {
+    backgroundColor: colors.card, borderRadius: 12, marginBottom: 10,
+    borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginTop: 4,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 6,
+  },
+  title: { fontSize: 12, fontWeight: '700', color: colors.textSec },
+  badge: {
+    backgroundColor: colors.warning, borderRadius: 10, minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+  },
+  badgeText: { fontSize: 10, color: '#000', fontWeight: '800' },
+  hint: { flex: 1, fontSize: 11, color: colors.textMuted, fontStyle: 'italic' },
+  body: { borderTopWidth: 1, borderTopColor: colors.border, padding: 12, gap: 10 },
+  legend: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+  },
+  chipText: { fontSize: 11, color: colors.textSec, fontWeight: '600' },
+  summary: { gap: 3 },
+  summaryLine: { fontSize: 11, fontWeight: '600', lineHeight: 17 },
 });
 
 /* ─── Modal Styles ───────────────────────────────────────────────── */

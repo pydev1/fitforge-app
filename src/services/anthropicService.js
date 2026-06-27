@@ -66,6 +66,48 @@ Rules:
   }
 }
 
+// Returns { name, muscles, why, howTo } or null.
+// Called when user marks an exercise as painful and requests an AI alternative.
+export async function getExerciseAlternative(exercise, painGroups, equipment, userProfile, apiKey) {
+  if (!apiKey) return null;
+  const equipmentStr = equipment.length
+    ? equipment.map(e => e.replace('_', ' ')).join(', ')
+    : 'bodyweight only';
+
+  const prompt = `You are a fitness coach. Suggest ONE alternative exercise to replace "${exercise.name}" because the athlete reports pain/soreness in: ${painGroups.join(', ')}.
+
+Current exercise muscles: ${exercise.muscles}
+Equipment available: ${equipmentStr}
+Fitness level: ${userProfile.fitnessLevel || 'beginner'}
+
+Reply with ONLY valid JSON, no other text:
+{"name":"<exercise name>","muscles":"<muscles worked>","why":"<why it avoids the pain area, 8 words max>","howTo":"<one-sentence instruction>"}`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 200,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
 function buildSystemPrompt(userProfile) {
   if (!userProfile || !userProfile.name) {
     return `You are FitForge AI Coach — a personal fitness assistant. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
