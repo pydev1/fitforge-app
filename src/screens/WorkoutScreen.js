@@ -1028,8 +1028,14 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
       {sets.map((set, idx) => {
         // Bands never suggest kg — they progress on reps instead.
         const ruleSuggestion = isBand ? null : getProgressionSuggestion(setLogs, exercise, idx, today, isDeload, restart);
-        // AI weight (whole-exercise) takes priority over the per-set rule fallback.
-        const suggestion = isBand ? null : (aiSuggestion?.weight != null ? aiSuggestion.weight : ruleSuggestion);
+        // Deload and post-break easing are deterministic and must win: the AI only
+        // sees your pre-break loads, so it would otherwise push weights back up and
+        // contradict the "lighter" banner. AI only fills in during normal weeks.
+        const suggestion = isBand
+          ? null
+          : (isDeload || restartActive)
+          ? ruleSuggestion
+          : (aiSuggestion?.weight != null ? aiSuggestion.weight : ruleSuggestion);
         const bandRepSuggestion = isBand ? getBandRepSuggestion(setLogs, exercise, idx, today) : null;
         const isAmrap = idx === lastSetIdx;
         const repsPlaceholder = bandRepSuggestion != null
