@@ -125,6 +125,14 @@ function toWorkoutExercise(ex, primaryGoal) {
   };
 }
 
+// Build a single workout-exercise from a library id, using the same set/rep
+// scheme the generator would apply. Used for on-the-fly exercise swaps.
+export function makeWorkoutExercise(exerciseId, primaryGoal = 'general_fitness') {
+  const ex = EXERCISES[exerciseId];
+  if (!ex) return null;
+  return toWorkoutExercise(ex, primaryGoal);
+}
+
 function getPostureWarmup(type, jobType) {
   const block = POSTURE_WARMUPS[type] || POSTURE_WARMUPS.full;
   return jobType === 'desk' ? block : block.slice(0, 1);

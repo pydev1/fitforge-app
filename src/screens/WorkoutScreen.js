@@ -8,8 +8,23 @@ import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
 import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
-import { getProgramWeek, getProgressionModifier, applyProgression } from '../utils/progression';
+import {
+  getProgramWeek, getProgressionModifier, applyProgression,
+  isBandExercise, BAND_SWAPS,
+} from '../utils/progression';
+import { makeWorkoutExercise } from '../utils/workoutGenerator';
+import { EXERCISES } from '../data/exerciseLibrary';
 import { getWorkoutSuggestions } from '../services/anthropicService';
+
+// Replace an exercise with its swapped-in alternative (if the user chose one).
+// Keeps a breadcrumb back to the original so we can offer "switch back".
+function resolveExercise(ex, swaps, primaryGoal) {
+  const altId = swaps?.[ex.id];
+  if (!altId) return ex;
+  const alt = makeWorkoutExercise(altId, primaryGoal);
+  if (!alt) return ex;
+  return { ...alt, swappedFrom: ex.id, swappedFromName: ex.name };
+}
 
 const TABS = ['Today', 'Weekly', 'Posture Guide'];
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -160,7 +175,7 @@ const PHASE_COLORS = {
 };
 
 function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo, onSetSaved, onGoToPosture }) {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const [allSetData, setAllSetData] = React.useState({});
   const [completedExercises, setCompletedExercises] = React.useState(new Set());
   const [aiSuggestions, setAiSuggestions] = React.useState({});
@@ -168,15 +183,27 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
-  const programWeek = getProgramWeek(completedWorkouts);
+  const restart = state.restart;
+  const swaps = state.swaps || {};
+  const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
+
+  // The 4-week cycle restarts at Base from the restart date, so a long layoff
+  // doesn't leave you mid-cycle (or on a phantom deload week).
+  const programWeek = getProgramWeek(completedWorkouts, restart?.date);
   const mod = getProgressionModifier(programWeek);
+
+  // "Ramp" = the eased-in block right after a restart, before any set has been
+  // logged on/after the restart date. During it we defer to the deterministic
+  // eased loads and skip the AI so nothing pushes weights back up too soon.
+  const rampActive = !!restart && !(state.progress.setLogs || []).some(l => l.date >= restart.date);
 
   // Fetch AI starting-weight suggestions once per session load (gated on API key).
   // Completed sets are never overwritten — suggestions only feed input placeholders.
   React.useEffect(() => {
-    // On deload weeks the app enforces a deterministic lighter load (≈60%),
-    // so skip the AI call entirely — it must not override the recovery week.
-    if (!workout?.exercises?.length || !state.apiKey || mod.isDeload) {
+    // On deload weeks and during a post-break ramp the app enforces
+    // deterministic lighter loads, so skip the AI call entirely — it must not
+    // override the recovery week or push a returning athlete up too fast.
+    if (!workout?.exercises?.length || !state.apiKey || mod.isDeload || rampActive) {
       setAiSuggestions({});
       setAiLoading(false);
       return;
@@ -195,8 +222,8 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
       .catch(() => {})
       .finally(() => { if (!cancelled) setAiLoading(false); });
     return () => { cancelled = true; };
-    // Re-run only when the workout, key, or deload state changes — not on every set log.
-  }, [workout?.id, state.apiKey, mod.isDeload]);
+    // Re-run only when the workout, key, deload, or ramp state changes — not on every set log.
+  }, [workout?.id, state.apiKey, mod.isDeload, rampActive]);
 
   function getSetData(exercise) {
     const setLogs = state.progress.setLogs || [];
@@ -290,6 +317,21 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         />
       )}
 
+      {rampActive && (
+        <View style={s.restartBanner}>
+          <View style={s.restartBadge}>
+            <Ionicons name="refresh" size={13} color={colors.onAccent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.restartTitle}>Easing back in</Text>
+            <Text style={s.restartSub}>
+              Loads set ~{Math.round((1 - (restart?.factor ?? 1)) * 100)}% lighter after {restart?.weeksOff ?? 0} week
+              {(restart?.weeksOff ?? 0) === 1 ? '' : 's'} off. Hit these clean and they climb back fast.
+            </Text>
+          </View>
+        </View>
+      )}
+
       <View style={[s.progressionBanner, { borderColor: PHASE_COLORS[mod.label] + '50' }]}>
         <View style={s.progressionLeft}>
           <Text style={s.progressionWeek}>Week {programWeek} of 4</Text>
@@ -311,26 +353,38 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         </View>
       )}
 
-      {workout.exercises?.map(ex => {
+      {workout.exercises?.map(orig => {
+        const ex = resolveExercise(orig, swaps, primaryGoal);
         const progressedEx = applyProgression(ex, mod);
-        const isCompleted = completedExercises.has(ex.id);
+        const isCompleted = completedExercises.has(orig.id);
+        // Offer the dumbbell swap unless its target is already in today's session.
+        const swapCandidate = BAND_SWAPS[orig.id];
+        const swapCollision = swapCandidate && workout.exercises.some(e => e.id === swapCandidate);
+        const swapToId = ex.swappedFrom || swapCollision ? null : swapCandidate;
         return (
           <ExerciseCard
-            key={ex.id}
+            key={orig.id}
             exercise={progressedEx}
-            expanded={expandedId === ex.id}
-            onToggle={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
+            expanded={expandedId === orig.id}
+            onToggle={() => setExpandedId(expandedId === orig.id ? null : orig.id)}
             accentColor={workout.color}
             onInfo={() => onInfo(ex)}
             isToday
             setData={getSetData(progressedEx)}
-            onSetDataChange={(newSets) => handleSetDataChange(ex.id, newSets)}
+            onSetDataChange={(newSets) => handleSetDataChange(progressedEx.id, newSets)}
             isDeload={mod.isDeload}
             isCompleted={isCompleted}
-            onToggleComplete={() => toggleExercise(ex.id)}
+            onToggleComplete={() => toggleExercise(orig.id)}
             onSetSaved={onSetSaved}
-            aiSuggestion={aiSuggestions[ex.id]}
+            aiSuggestion={aiSuggestions[progressedEx.id]}
             aiLoading={aiLoading && !!state.apiKey}
+            restart={restart}
+            isBand={isBandExercise(ex.equipment)}
+            swapToId={swapToId}
+            swapToName={swapToId ? EXERCISES[swapToId]?.name : null}
+            isSwapped={!!ex.swappedFrom}
+            swapBackName={ex.swappedFrom ? EXERCISES[ex.swappedFrom]?.name : null}
+            onSwap={(toId) => dispatch({ type: 'SET_SWAP', payload: { from: orig.id, to: toId } })}
           />
         );
       })}
@@ -420,13 +474,21 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved, aiSuggestion, aiLoading }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved, aiSuggestion, aiLoading, restart, isBand, swapToId, swapToName, isSwapped, swapBackName, onSwap }) {
   return (
     <TouchableOpacity style={[s.exCard, isCompleted && { opacity: 0.55 }]} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
         <View style={[s.exColorBar, { backgroundColor: accentColor }]} />
         <View style={{ flex: 1 }}>
-          <Text style={s.exName}>{exercise.name}</Text>
+          <View style={s.exNameRow}>
+            <Text style={s.exName}>{exercise.name}</Text>
+            {isSwapped && (
+              <View style={s.swapTag}>
+                <Ionicons name="swap-horizontal" size={9} color={colors.info} />
+                <Text style={s.swapTagText}>swapped</Text>
+              </View>
+            )}
+          </View>
           <View style={s.exMeta}>
             <Chip text={`${exercise.sets} sets`} />
             <Chip text={exercise.reps} />
@@ -465,7 +527,23 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
               <Text style={s.postureNoteText}>{exercise.postureNote}</Text>
             </View>
           )}
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} aiSuggestion={aiSuggestion} aiLoading={aiLoading} />}
+
+          {/* Band ↔ dumbbell swap — bands can't be micro-loaded, so offer the
+              dumbbell version that hits the same muscles and loads in kg. */}
+          {(swapToId || isSwapped) && (
+            <TouchableOpacity
+              style={s.swapBtn}
+              onPress={e => { e.stopPropagation?.(); onSwap(isSwapped ? null : swapToId); }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="swap-horizontal" size={15} color={colors.info} />
+              <Text style={s.swapBtnText}>
+                {isSwapped ? `Switch back to ${swapBackName} (band)` : `Swap to ${swapToName} (dumbbells)`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} aiSuggestion={aiSuggestion} aiLoading={aiLoading} restart={restart} isBand={isBand} />}
         </View>
       )}
     </TouchableOpacity>
@@ -495,6 +573,9 @@ function DetailRow({ icon, label, value }) {
 /* ─── Weekly Tab ─────────────────────────────────────────────────── */
 
 function WeeklyTab({ generatedPlan, completedWorkouts }) {
+  const { state } = useApp();
+  const swaps = state.swaps || {};
+  const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
   const todayKey = getTodayKey();
   const [expandedDay, setExpandedDay] = React.useState(null);
 
@@ -586,13 +667,16 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
               )}
               {isExpanded && workout && (
                 <View style={s.weekExList}>
-                  {workout.exercises?.map((ex, i) => (
-                    <View key={ex.id} style={[s.weekExRow, i === workout.exercises.length - 1 && { borderBottomWidth: 0 }]}>
-                      <Text style={s.weekExName}>{ex.name}</Text>
-                      <Text style={s.weekExMeta}>{ex.sets} sets · {ex.reps} · Rest {ex.rest}</Text>
-                      <Text style={s.weekExMuscles}>{ex.muscles}</Text>
-                    </View>
-                  ))}
+                  {workout.exercises?.map((orig, i) => {
+                    const ex = resolveExercise(orig, swaps, primaryGoal);
+                    return (
+                      <View key={orig.id} style={[s.weekExRow, i === workout.exercises.length - 1 && { borderBottomWidth: 0 }]}>
+                        <Text style={s.weekExName}>{ex.name}{ex.swappedFrom ? '  ↔' : ''}</Text>
+                        <Text style={s.weekExMeta}>{ex.sets} sets · {ex.reps} · Rest {ex.rest}</Text>
+                        <Text style={s.weekExMuscles}>{ex.muscles}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -754,7 +838,7 @@ function deriveFeedback(repsStr, repsTarget, isAmrap) {
 // Next-session starting weight. The progression decision is made once per exercise
 // from last session's final (max) set, then applied uniformly to every set so the
 // suggested loads stay consistent across the working sets.
-function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload) {
+function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload, restart) {
   const past = setLogs
     .filter(l => l.exerciseId === exercise.id && l.date !== today)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -767,6 +851,13 @@ function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload) {
 
   const sameSet = lastSession.find(l => l.setNumber === setIdx + 1);
   const baseWeight = sameSet ? sameSet.weight : lastSession[lastSession.length - 1].weight;
+
+  // Restart easing: if this exercise hasn't been retrained since the restart,
+  // start from an eased load. Once it's logged again, this branch stops firing
+  // and normal progression climbs it back up from the new baseline.
+  if (restart && lastDate < restart.date) {
+    return Math.round(baseWeight * restart.factor * 2) / 2;
+  }
   if (isDeload) return Math.round(baseWeight * 0.6 * 2) / 2;
 
   const step = exercise.equipment === 'Bodyweight' ? 0 : 2.5;
@@ -783,7 +874,19 @@ function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload) {
   return weight;
 }
 
-function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved, aiSuggestion, aiLoading }) {
+// Bands progress by reps, not kg — suggest a couple more reps than last time.
+function getBandRepSuggestion(setLogs, exercise, setIdx, today) {
+  const past = setLogs
+    .filter(l => l.exerciseId === exercise.id && l.date !== today)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!past.length) return null;
+  const lastDate = past[0].date;
+  const lastSession = past.filter(l => l.date === lastDate).sort((a, b) => a.setNumber - b.setNumber);
+  const sameSet = lastSession.find(l => l.setNumber === setIdx + 1) || lastSession[lastSession.length - 1];
+  return sameSet?.reps ? sameSet.reps + 2 : null;
+}
+
+function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved, aiSuggestion, aiLoading, restart, isBand }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
   const today = toLocalDateKey();
@@ -798,6 +901,10 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
     const lastDate = past[0].date;
     return { date: lastDate, sets: past.filter(l => l.date === lastDate).sort((a, b) => a.setNumber - b.setNumber) };
   }, [setLogs, exercise.id, today]);
+
+  // This exercise is in "easing back" mode if we haven't retrained it since the restart.
+  const restartActive = !!restart && !!lastSessionLogs && lastSessionLogs.date < restart.date;
+  const easePct = restart ? Math.round((1 - restart.factor) * 100) : 0;
 
   function setField(idx, field, value) {
     onSetsChange(sets.map((s, i) => i === idx ? { ...s, [field]: value } : s));
@@ -869,13 +976,29 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         </View>
       )}
 
-      {/* Suggestion banner — deload takes priority (deterministic recovery load) */}
-      {isDeload ? (
+      {/* Suggestion banner — band / deload / restart take priority over AI */}
+      {isBand ? (
+        <View style={[sl.aiBanner, { borderColor: colors.info + '40' }]}>
+          <Ionicons name="pulse" size={13} color={colors.info} />
+          <Text style={sl.aiBannerText}>
+            <Text style={[sl.aiBannerStrong, { color: colors.info }]}>Bands progress by reps, not kg.</Text>
+            {' '}Add a rep or two each session; when the last set feels easy, move up a band.
+          </Text>
+        </View>
+      ) : isDeload ? (
         <View style={sl.aiBanner}>
           <Ionicons name="leaf" size={13} color={colors.success} />
           <Text style={sl.aiBannerText}>
             <Text style={[sl.aiBannerStrong, { color: colors.success }]}>Deload week — recover.</Text>
             {' '}Suggested weights eased ~40%. Keep it light and clean.
+          </Text>
+        </View>
+      ) : restartActive ? (
+        <View style={[sl.aiBanner, { borderColor: colors.accent + '55' }]}>
+          <Ionicons name="refresh" size={13} color={colors.accentLight} />
+          <Text style={sl.aiBannerText}>
+            <Text style={sl.aiBannerStrong}>Back after a break — starting ~{easePct}% lighter.</Text>
+            {' '}Build up from here; it comes back quickly.
           </Text>
         </View>
       ) : aiLoading ? (
@@ -903,11 +1026,15 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
       </View>
 
       {sets.map((set, idx) => {
-        const ruleSuggestion = getProgressionSuggestion(setLogs, exercise, idx, today, isDeload);
+        // Bands never suggest kg — they progress on reps instead.
+        const ruleSuggestion = isBand ? null : getProgressionSuggestion(setLogs, exercise, idx, today, isDeload, restart);
         // AI weight (whole-exercise) takes priority over the per-set rule fallback.
-        const suggestion = aiSuggestion?.weight != null ? aiSuggestion.weight : ruleSuggestion;
+        const suggestion = isBand ? null : (aiSuggestion?.weight != null ? aiSuggestion.weight : ruleSuggestion);
+        const bandRepSuggestion = isBand ? getBandRepSuggestion(setLogs, exercise, idx, today) : null;
         const isAmrap = idx === lastSetIdx;
-        const repsPlaceholder = isAmrap ? `${repTop}+` : String(repTop);
+        const repsPlaceholder = bandRepSuggestion != null
+          ? `${bandRepSuggestion}${isAmrap ? '+' : ''}`
+          : (isAmrap ? `${repTop}+` : String(repTop));
         const outcome = set.saved ? OUTCOME[set.feedback] : null;
         return (
           <View key={idx} style={[sl.row, set.saved && sl.rowSaved]}>
@@ -916,8 +1043,15 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
               <Text style={[sl.numText, set.saved && sl.numTextDone]}>{idx + 1}</Text>
             </View>
 
-            {/* Weight */}
-            {set.saved ? (
+            {/* Weight — bands carry no kg, so show a static tag instead of an input */}
+            {isBand ? (
+              <View style={[sl.colWeight, { alignItems: 'flex-start' }]}>
+                <View style={sl.bandTag}>
+                  <Ionicons name="pulse" size={11} color={colors.info} />
+                  <Text style={sl.bandTagText}>Band</Text>
+                </View>
+              </View>
+            ) : set.saved ? (
               <Text style={[sl.colWeight, sl.savedVal]}>{parseFloat(set.weight) === 0 ? 'BW' : `${set.weight}kg`}</Text>
             ) : (
               <View style={[sl.colWeight, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
@@ -981,11 +1115,19 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
       {/* How it works */}
       <View style={sl.helpBox}>
         <Ionicons name="flash" size={13} color={colors.accentLight} style={{ marginTop: 1 }} />
-        <Text style={sl.helpText}>
-          Hit the target reps on your working sets. On the <Text style={sl.helpStrong}>last set go to max</Text> —
-          as many clean reps as you can. We read your effort from the count, so there's no “easy/hard” to guess:
-          reach {repTop}+ and the weight goes up next time, fall short and it eases off.
-        </Text>
+        {isBand ? (
+          <Text style={sl.helpText}>
+            No weight to log here — <Text style={sl.helpStrong}>bands progress on reps</Text>. Beat last session's
+            count with clean, controlled reps. Once the last set feels easy at the top of the range, step up to a
+            thicker band — or use <Text style={sl.helpStrong}>Swap to dumbbells</Text> above to load it in kg instead.
+          </Text>
+        ) : (
+          <Text style={sl.helpText}>
+            Hit the target reps on your working sets. On the <Text style={sl.helpStrong}>last set go to max</Text> —
+            as many clean reps as you can. We read your effort from the count, so there's no “easy/hard” to guess:
+            reach {repTop}+ and the weight goes up next time, fall short and it eases off.
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -1089,6 +1231,32 @@ const s = StyleSheet.create({
     borderLeftWidth: 3, borderLeftColor: colors.accentLight,
   },
   postureNoteText: { fontSize: 12, color: colors.accentLight, lineHeight: 18 },
+
+  restartBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.accentDim, borderRadius: 12, padding: 12,
+    marginBottom: 10, borderWidth: 1, borderColor: colors.accent + '55',
+  },
+  restartBadge: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  restartTitle: { fontSize: 13, color: colors.accentLight, fontWeight: '800' },
+  restartSub: { fontSize: 11, color: colors.textSec, lineHeight: 16, marginTop: 1 },
+
+  exNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' },
+  swapTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.info + '18', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2,
+    borderWidth: 1, borderColor: colors.info + '40',
+  },
+  swapTagText: { fontSize: 8, color: colors.info, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+  swapBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.info + '14', borderRadius: 10, paddingVertical: 11,
+    borderWidth: 1, borderColor: colors.info + '40',
+  },
+  swapBtnText: { fontSize: 12, color: colors.info, fontWeight: '700' },
 
   progressionBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1246,6 +1414,12 @@ const sl = StyleSheet.create({
     textAlign: 'center', fontWeight: '600', flex: 1,
   },
   unitText: { fontSize: 10, color: colors.textMuted },
+  bandTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.info + '14', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7,
+    borderWidth: 1, borderColor: colors.info + '33',
+  },
+  bandTagText: { fontSize: 11, color: colors.info, fontWeight: '700' },
   savedVal: { fontSize: 13, color: colors.success, fontWeight: '700', textAlign: 'center' },
   saveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   saveBtnDone: { backgroundColor: colors.success + '40' },

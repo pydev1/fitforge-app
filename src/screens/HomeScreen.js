@@ -6,7 +6,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { MOTIVATIONAL_QUOTES } from '../data/workoutData';
 import { colors } from '../theme/colors';
-import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
+import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
+import { RESTART_GAP_DAYS } from '../utils/progression';
+
+function getLastActivityDate(progress) {
+  const dates = [
+    ...(progress.completedWorkouts || []).map(w => w.date),
+    ...(progress.setLogs || []).map(l => l.date),
+  ].filter(Boolean).sort();
+  return dates.length ? dates[dates.length - 1] : null;
+}
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -214,6 +223,18 @@ export default function HomeScreen({ navigation }) {
 
   const contextCard = getContextCard(progress, generatedPlan, userProfile, todayWorkout, todayDone);
 
+  // Detraining re-entry: after a real break, offer a guided restart. Hidden once
+  // a restart is recorded (its date is newer than the last session) or snoozed today.
+  const restart = state.restart;
+  const lastActivity = getLastActivityDate(progress);
+  const daysSinceLast = lastActivity ? daysBetweenLocalDateKeys(lastActivity, today) : null;
+  const showWelcomeBack =
+    daysSinceLast != null && daysSinceLast >= RESTART_GAP_DAYS &&
+    (!restart || restart.date <= lastActivity) &&
+    state.restartSnoozedOn !== today;
+  const rampActive = !!restart && !(progress.setLogs || []).some(l => l.date >= restart.date);
+  const weeksSinceLast = daysSinceLast != null ? Math.round(daysSinceLast / 7) : 0;
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
@@ -229,6 +250,34 @@ export default function HomeScreen({ navigation }) {
             <Ionicons name="settings-sharp" size={20} color={colors.textSec} />
           </TouchableOpacity>
         </View>
+
+        {/* ── Welcome-back restart prompt (after a real break) ── */}
+        {showWelcomeBack && (
+          <TouchableOpacity
+            style={s.restartCard}
+            onPress={() => navigation.navigate('Restart')}
+            activeOpacity={0.9}
+          >
+            <View style={s.restartIcon}>
+              <Ionicons name="refresh" size={20} color={colors.onAccent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.restartTitle}>Welcome back{weeksSinceLast >= 2 ? ` — ${weeksSinceLast} weeks off` : ''}</Text>
+              <Text style={s.restartSub}>Restart smart: ease your loads back without losing any progress.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.accentLight} />
+          </TouchableOpacity>
+        )}
+
+        {/* ── Easing-back indicator (restart applied, first block not yet trained) ── */}
+        {!showWelcomeBack && rampActive && (
+          <View style={s.rampChip}>
+            <Ionicons name="refresh" size={13} color={colors.accentLight} />
+            <Text style={s.rampChipText}>
+              Easing back in · loads set ~{Math.round((1 - (restart.factor ?? 1)) * 100)}% lighter
+            </Text>
+          </View>
+        )}
 
         {/* ── Hero stats card ── */}
         <View style={s.heroCard}>
@@ -460,6 +509,55 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border,
     marginTop: 2,
+  },
+
+  restartCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: colors.accentDim,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.accent + '66',
+  },
+  restartIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  restartTitle: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 15,
+    color: colors.accentLight,
+  },
+  restartSub: {
+    fontFamily: 'Figtree_400Regular',
+    fontSize: 12,
+    color: colors.textSec,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  rampChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accentDim,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.accent + '40',
+  },
+  rampChipText: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 11,
+    color: colors.accentLight,
   },
 
   heroCard: {
