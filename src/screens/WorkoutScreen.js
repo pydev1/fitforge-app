@@ -13,6 +13,7 @@ import {
   isBandExercise, BAND_SWAPS,
 } from '../utils/progression';
 import { makeWorkoutExercise } from '../utils/workoutGenerator';
+import { getDumbbellLadder, snapToLoad, nextLoadUp, nextLoadDown } from '../utils/equipment';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { getWorkoutSuggestions } from '../services/anthropicService';
 
@@ -854,26 +855,27 @@ function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload, re
   const sameSet = lastSession.find(l => l.setNumber === setIdx + 1);
   const baseWeight = sameSet ? sameSet.weight : lastSession[lastSession.length - 1].weight;
 
+  // Snap every kg output to a load the user can actually build from their kit.
+  // Non-dumbbell moves (bodyweight) have no ladder, so they fall back to 0.5kg.
+  const ladder = getDumbbellLadder(exercise);
+  const snap = v => (ladder ? snapToLoad(v, ladder) : Math.round(v * 2) / 2);
+
   // Restart easing: if this exercise hasn't been retrained since the restart,
   // start from an eased load. Once it's logged again, this branch stops firing
   // and normal progression climbs it back up from the new baseline.
-  if (restart && lastDate < restart.date) {
-    return Math.round(baseWeight * restart.factor * 2) / 2;
-  }
-  if (isDeload) return Math.round(baseWeight * 0.6 * 2) / 2;
+  if (restart && lastDate < restart.date) return snap(baseWeight * restart.factor);
+  if (isDeload) return snap(baseWeight * 0.6);
 
-  const step = exercise.equipment === 'Bodyweight' ? 0 : 2.5;
   const finalSet = lastSession[lastSession.length - 1];
   const anyHard = lastSession.some(l => l.feedback === 'hard');
 
-  let weight = baseWeight;
-  if (step > 0 && finalSet.feedback === 'easy' && !anyHard) {
-    weight = Math.round((baseWeight + step) * 2) / 2;
-  } else if (step > 0 && anyHard) {
-    weight = Math.max(0, Math.round((baseWeight - step) * 2) / 2);
-  }
+  // Bodyweight moves carry no external load, so there's nothing to step.
+  if (!ladder) return baseWeight;
 
-  return weight;
+  // Progress by whole rungs of the real ladder, not an unloadable +2.5kg.
+  if (finalSet.feedback === 'easy' && !anyHard) return nextLoadUp(baseWeight, ladder);
+  if (anyHard) return nextLoadDown(baseWeight, ladder);
+  return snap(baseWeight);   // maintain — but make sure it's a loadable number
 }
 
 // Bands progress by reps, not kg — suggest a couple more reps than last time.
@@ -907,6 +909,12 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
   // This exercise is in "easing back" mode if we haven't retrained it since the restart.
   const restartActive = !!restart && !!lastSessionLogs && lastSessionLogs.date < restart.date;
   const easePct = restart ? Math.round((1 - restart.factor) * 100) : 0;
+
+  // AI weight shown in the banner, snapped to a load the user can actually build.
+  const bannerLadder = getDumbbellLadder(exercise);
+  const aiWeightDisplay = aiSuggestion?.weight != null
+    ? (bannerLadder ? snapToLoad(aiSuggestion.weight, bannerLadder) : aiSuggestion.weight)
+    : null;
 
   function setField(idx, field, value) {
     onSetsChange(sets.map((s, i) => i === idx ? { ...s, [field]: value } : s));
@@ -1012,7 +1020,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         <View style={sl.aiBanner}>
           <Text style={sl.aiSpark}>✦</Text>
           <Text style={sl.aiBannerText}>
-            <Text style={sl.aiBannerStrong}>AI suggests {aiSuggestion.weight}kg</Text>
+            <Text style={sl.aiBannerStrong}>AI suggests {aiWeightDisplay}kg</Text>
             {aiSuggestion.reason ? ` · ${aiSuggestion.reason}` : ''}
           </Text>
         </View>
@@ -1033,11 +1041,14 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         // Deload and post-break easing are deterministic and must win: the AI only
         // sees your pre-break loads, so it would otherwise push weights back up and
         // contradict the "lighter" banner. AI only fills in during normal weeks.
-        const suggestion = isBand
+        const rawSuggestion = isBand
           ? null
           : (isDeload || restartActive)
           ? ruleSuggestion
           : (aiSuggestion?.weight != null ? aiSuggestion.weight : ruleSuggestion);
+        // Snap to a loadable rung (rule values are already snapped; this catches AI).
+        const rowLadder = getDumbbellLadder(exercise);
+        const suggestion = rawSuggestion != null && rowLadder ? snapToLoad(rawSuggestion, rowLadder) : rawSuggestion;
         const bandRepSuggestion = isBand ? getBandRepSuggestion(setLogs, exercise, idx, today) : null;
         const isAmrap = idx === lastSetIdx;
         const repsPlaceholder = bandRepSuggestion != null
