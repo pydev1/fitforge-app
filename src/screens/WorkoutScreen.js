@@ -192,10 +192,12 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const programWeek = getProgramWeek(completedWorkouts, restart?.date);
   const mod = getProgressionModifier(programWeek);
 
-  // "Ramp" = the eased-in block right after a restart, before any set has been
-  // logged on/after the restart date. During it we defer to the deterministic
-  // eased loads and skip the AI so nothing pushes weights back up too soon.
-  const rampActive = !!restart && !(state.progress.setLogs || []).some(l => l.date >= restart.date);
+  // "Ramp" = the eased-in block right after a restart, until a full session has
+  // been completed on/after the restart date. Keyed on completed workouts (not
+  // individual set logs) so it stays stable through the whole comeback session
+  // rather than flipping the instant the first set is saved. During it we defer
+  // to deterministic eased loads and skip the AI so nothing pushes weights up.
+  const rampActive = !!restart && !completedWorkouts.some(w => w.date >= restart.date);
 
   // Fetch AI starting-weight suggestions once per session load (gated on API key).
   // Completed sets are never overwritten — suggestions only feed input placeholders.

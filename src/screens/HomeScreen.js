@@ -232,7 +232,7 @@ export default function HomeScreen({ navigation }) {
     daysSinceLast != null && daysSinceLast >= RESTART_GAP_DAYS &&
     (!restart || restart.date <= lastActivity) &&
     state.restartSnoozedOn !== today;
-  const rampActive = !!restart && !(progress.setLogs || []).some(l => l.date >= restart.date);
+  const rampActive = !!restart && !(progress.completedWorkouts || []).some(w => w.date >= restart.date);
   const weeksSinceLast = daysSinceLast != null ? Math.round(daysSinceLast / 7) : 0;
 
   return (
