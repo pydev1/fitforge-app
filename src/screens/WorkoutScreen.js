@@ -13,7 +13,7 @@ import {
   isBandExercise, BAND_SWAPS,
 } from '../utils/progression';
 import { makeWorkoutExercise } from '../utils/workoutGenerator';
-import { getDumbbellLadder, snapToLoad, nextLoadUp, nextLoadDown } from '../utils/equipment';
+import { getDumbbellLadder, isTwoDumbbell, snapToLoad, nextLoadUp, nextLoadDown } from '../utils/equipment';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { getWorkoutSuggestions } from '../services/anthropicService';
 
@@ -825,13 +825,38 @@ function parseRepRange(reps) {
   return { min: matches[0], max: matches[1] || matches[0] };
 }
 
+// Predict achievable reps for a specific set from last session's actual count
+// for that same set, adjusted for today's load (~3% of load ≈ 1 rep). Reps
+// naturally descend with fatigue (e.g. 14/12/10), so targets follow that
+// shape instead of showing the flat top of the prescribed range for every set.
+function getRepPrediction(lastSession, setIdx, plannedWeight) {
+  if (!lastSession?.sets?.length) return null;
+  const same = lastSession.sets.find(l => l.setNumber === setIdx + 1)
+    || lastSession.sets[lastSession.sets.length - 1];
+  if (!same?.reps) return null;
+  let adj = 0;
+  if (plannedWeight != null && same.weight > 0) {
+    adj = Math.round(((same.weight - plannedWeight) / same.weight) / 0.035);
+    adj = Math.max(-4, Math.min(4, adj)); // cap: load-change extrapolation is rough
+  }
+  return Math.max(1, same.reps + adj);
+}
+
 // Objectively rate a set from reps alone — no "feel" guess required.
-// Working sets are capped at the target, so they can only register a miss (hard)
-// or success (good). The final AMRAP set is taken to your max, so beating the top
-// of the range registers as easy (you've outgrown the weight → go up).
-function deriveFeedback(repsStr, repsTarget, isAmrap) {
+// With history, each set is judged against its own fatigue-aware target;
+// beating the final (AMRAP) set's target by 2+ means the weight goes up.
+// Without history, fall back to the prescribed range: below min = hard,
+// AMRAP reaching the top of the range = easy.
+function deriveFeedback(repsStr, repsTarget, isAmrap, predicted) {
   const done = parseInt(repsStr, 10);
   if (!done) return 'good';
+  if (predicted != null) {
+    // 1-rep grace: predictions extrapolate from load change, so a whisker
+    // under target is still "on target", not a miss.
+    if (done < predicted - 1) return 'hard';
+    if (isAmrap && done >= predicted + 2) return 'easy';
+    return 'good';
+  }
   const { min, max } = parseRepRange(repsTarget);
   if (done < min) return 'hard';
   if (isAmrap && isFinite(max) && done >= max) return 'easy';
@@ -936,7 +961,10 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
       return;
     }
     const isAmrap = idx === sets.length - 1;
-    const feedback = deriveFeedback(set.reps, exercise.reps, isAmrap);
+    // Judge against the fatigue-aware per-set target at the weight actually
+    // lifted — so a normal set-3 rep drop isn't misread as "hard".
+    const predicted = isBand ? null : getRepPrediction(lastSessionLogs, idx, w > 0 ? w : null);
+    const feedback = deriveFeedback(set.reps, exercise.reps, isAmrap, predicted);
     const logKey = `${today}:${exercise.id}:${idx + 1}`;
     dispatch({
       type: 'LOG_SET',
@@ -963,6 +991,10 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
   const { min: repMin, max: repMax } = parseRepRange(exercise.reps);
   const repTop = isFinite(repMax) ? repMax : repMin;
   const lastSetIdx = sets.length - 1;
+  // Per-dumbbell convention: two-DB moves label the field kg/db so 11.75 means
+  // one 11.75kg dumbbell in each hand.
+  const twoDb = isTwoDumbbell(exercise);
+  const unitLabel = twoDb ? 'kg/db' : 'kg';
 
   const FEEL_ICONS = { easy: '🟢', good: '🔵', hard: '🔴' };
 
@@ -971,7 +1003,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
       {/* Last session history */}
       {lastSessionLogs && (
         <View style={sl.lastSession}>
-          <Text style={sl.lastSessionTitle}>Last session · {lastSessionLogs.date}</Text>
+          <Text style={sl.lastSessionTitle}>Last session · {lastSessionLogs.date}{twoDb ? ' · kg per dumbbell' : ''}</Text>
           <View style={sl.lastSessionRows}>
             {lastSessionLogs.sets.map(log => (
               <View key={log.setNumber} style={sl.lastSessionRow}>
@@ -1051,8 +1083,13 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         const suggestion = rawSuggestion != null && rowLadder ? snapToLoad(rawSuggestion, rowLadder) : rawSuggestion;
         const bandRepSuggestion = isBand ? getBandRepSuggestion(setLogs, exercise, idx, today) : null;
         const isAmrap = idx === lastSetIdx;
+        // Fatigue-aware rep target: last session's count for THIS set, adjusted
+        // for today's load. Falls back to the range top when there's no history.
+        const predictedReps = isBand ? null : getRepPrediction(lastSessionLogs, idx, suggestion);
         const repsPlaceholder = bandRepSuggestion != null
           ? `${bandRepSuggestion}${isAmrap ? '+' : ''}`
+          : predictedReps != null
+          ? `${predictedReps}${isAmrap ? '+' : ''}`
           : (isAmrap ? `${repTop}+` : String(repTop));
         const outcome = set.saved ? OUTCOME[set.feedback] : null;
         return (
@@ -1082,7 +1119,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
                   placeholder={suggestion != null ? String(suggestion) : '0'}
                   placeholderTextColor={colors.textMuted}
                 />
-                <Text style={sl.unitText}>kg</Text>
+                <Text style={sl.unitText}>{unitLabel}</Text>
               </View>
             )}
 
@@ -1142,9 +1179,10 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
           </Text>
         ) : (
           <Text style={sl.helpText}>
-            Hit the target reps on your working sets. On the <Text style={sl.helpStrong}>last set go to max</Text> —
-            as many clean reps as you can. We read your effort from the count, so there's no “easy/hard” to guess:
-            reach {repTop}+ and the weight goes up next time, fall short and it eases off.
+            Rep targets adapt to <Text style={sl.helpStrong}>your last session and today's load</Text> — they
+            drop across sets as fatigue sets in, so don't expect set 3 to match set 1. On the{' '}
+            <Text style={sl.helpStrong}>last set go to max</Text> — as many clean reps as you can. Beat its
+            target by 2+ and the weight goes up next time; fall short of target and it eases off.
           </Text>
         )}
       </View>
