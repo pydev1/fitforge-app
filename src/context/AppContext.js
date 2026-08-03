@@ -29,6 +29,13 @@ const defaultState = {
   generatedPlan: null,
   progress: { ...INITIAL_PROGRESS, setLogs: [] },
   chatHistory: [],
+  // Detraining restart: { date, weeksOff, factor, mode } or null. History and
+  // measurements are never modified — this only eases suggested loads.
+  restart: null,
+  // Per-exercise substitutions, keyed by the original exercise id → new id.
+  swaps: {},
+  // Local date key we last dismissed the "welcome back" prompt on.
+  restartSnoozedOn: null,
   isLoaded: false,
 };
 
@@ -128,6 +135,21 @@ function reducer(state, action) {
           ),
         },
       };
+    case 'RESTART_PROGRAM':
+      // payload: { date, weeksOff, factor, mode }. Purely additive — no logs,
+      // measurements, or completed workouts are removed.
+      return { ...state, restart: action.payload, restartSnoozedOn: null };
+    case 'CLEAR_RESTART':
+      return { ...state, restart: null };
+    case 'SNOOZE_RESTART':
+      return { ...state, restartSnoozedOn: action.payload };
+    case 'SET_SWAP': {
+      // payload: { from, to }. to === null removes the swap.
+      const swaps = { ...(state.swaps || {}) };
+      if (action.payload.to == null) delete swaps[action.payload.from];
+      else swaps[action.payload.from] = action.payload.to;
+      return { ...state, swaps };
+    }
     case 'SET_REMINDER':
       return { ...state, reminderEnabled: action.payload.enabled, reminderHour: action.payload.hour ?? state.reminderHour };
     case 'ADD_MESSAGE':

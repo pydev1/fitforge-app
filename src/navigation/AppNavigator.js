@@ -13,6 +13,7 @@ import CoachScreen from '../screens/CoachScreen';
 import ProgressScreen from '../screens/ProgressScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
+import RestartScreen from '../screens/RestartScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -80,6 +81,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
+          options={{ presentation: 'modal', cardStyle: { backgroundColor: colors.bg } }}
+        />
+        <Stack.Screen
+          name="Restart"
+          component={RestartScreen}
           options={{ presentation: 'modal', cardStyle: { backgroundColor: colors.bg } }}
         />
       </Stack.Navigator>

@@ -293,6 +293,41 @@ export default function SettingsScreen({ navigation }) {
           <Text style={s.regenNote}>Rebuilds your entire plan from your updated profile settings above.</Text>
         </View>
 
+        {/* Program restart */}
+        <Section title="Coming Back From A Break" icon="refresh-outline">
+          {state.restart && (
+            <View style={s.restartStatus}>
+              <Ionicons name="checkmark-circle" size={15} color={colors.accentLight} />
+              <Text style={s.restartStatusText}>
+                Easing back active — loads ~{Math.round((1 - state.restart.factor) * 100)}% lighter since {state.restart.date}.
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity style={s.restartBtn} onPress={() => navigation.navigate('Restart')} activeOpacity={0.85}>
+            <Ionicons name="refresh" size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+            <Text style={s.restartBtnText}>{state.restart ? 'Adjust Restart' : 'Restart After A Break'}</Text>
+          </TouchableOpacity>
+          {state.restart && (
+            <TouchableOpacity
+              style={s.restartClearBtn}
+              onPress={() => Alert.alert(
+                'End restart mode?',
+                'Suggested loads go back to normal progression. Your history is unaffected.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'End restart', onPress: () => dispatch({ type: 'CLEAR_RESTART' }) },
+                ],
+              )}
+            >
+              <Text style={s.restartClearText}>End restart mode</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={s.regenNote}>
+            Been away for a while? This eases your suggested weights back down and restarts the 4-week cycle — your
+            measurements, logs and personal bests are kept.
+          </Text>
+        </Section>
+
         {/* Reminders */}
         <Section title="Daily Reminder" icon="notifications-outline">
           <View style={s.reminderRow}>
@@ -460,6 +495,19 @@ const s = StyleSheet.create({
   },
   regenBtnText: { fontSize: 14, color: '#fff', fontWeight: '700' },
   regenNote: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 16 },
+  restartStatus: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.accentDim, borderRadius: 10, padding: 10, marginBottom: 12,
+    borderWidth: 1, borderColor: colors.accent + '40',
+  },
+  restartStatusText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 17 },
+  restartBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 14,
+  },
+  restartBtnText: { fontSize: 14, color: colors.onAccent, fontWeight: '700' },
+  restartClearBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, marginTop: 4 },
+  restartClearText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
   reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   reminderLabel: { fontSize: 14, color: colors.text, fontWeight: '600' },
   reminderSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
