@@ -50,10 +50,18 @@ const SINGLE_DB_IDS = new Set([
 
 // Which loadable ladder applies to this workout-exercise (null = not a dumbbell
 // move, e.g. bodyweight or band — nothing to snap).
+// CONVENTION: all dumbbell weights in the app are PER DUMBBELL (gym standard:
+// "pressing the 12s"), so two-DB moves use the per-hand ladder directly.
 export function getDumbbellLadder(exercise) {
   if (!exercise) return null;
   if (!/dumbbell/i.test(String(exercise.equipment || ''))) return null;
   return SINGLE_DB_IDS.has(exercise.id) ? SINGLE_DB_LOADS : TWO_DB_LOADS;
+}
+
+// True for moves performed with a dumbbell in EACH hand (weight field means
+// kg per dumbbell). Single-DB and non-dumbbell moves return false.
+export function isTwoDumbbell(exercise) {
+  return getDumbbellLadder(exercise) === TWO_DB_LOADS;
 }
 
 // Nearest achievable load to a target (ties resolve to the lighter option).

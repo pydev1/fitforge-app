@@ -42,6 +42,7 @@ Reply with ONLY valid JSON, no other text:
 {"suggestions":[{"id":"<exercise_id>","weight":<number or null>,"reason":"<8 words max>"}]}
 
 Rules:
+- All dumbbell weights (history AND your suggestions) are PER DUMBBELL — one hand — not the combined pair
 - weight must be null if there is no history (first session)
 - Round suggested weight to nearest 0.5kg
 - If last session sets were mostly "easy", increase by 5-10%
