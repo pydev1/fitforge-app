@@ -5,18 +5,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0A0A0F",
+    "backgroundColor": "#090B14",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A0A0F"
+      "resizeMode": "cover",
+      "backgroundColor": "#090B14"
     },
     "android": {
       "package": "com.fitforge.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A0A0F"
+        "backgroundColor": "#090B14"
       },
       "permissions": [
         "android.permission.CAMERA",
