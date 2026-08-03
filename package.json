@@ -5,7 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "stamp": "node scripts/stamp-build.js"
   },
   "dependencies": {
     "@expo-google-fonts/bebas-neue": "^0.4.1",

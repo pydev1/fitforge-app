@@ -6,12 +6,14 @@
     "preview": {
       "android": {
         "buildType": "apk"
-      }
+      },
+      "preBuildCommand": "node scripts/stamp-build.js"
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
-      }
+      },
+      "preBuildCommand": "node scripts/stamp-build.js"
     }
   }
 }

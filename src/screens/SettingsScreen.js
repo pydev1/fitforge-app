@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { BUILD_NUMBER, BUILD_DATE, GIT_HASH } from '../constants/buildInfo';
 
 const BODY_TYPES = ['skinny', 'skinny_fat', 'average', 'athletic', 'overweight'];
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -367,8 +368,9 @@ export default function SettingsScreen({ navigation }) {
         {/* About */}
         <Section title="About" icon="information-circle-outline">
           <InfoRow label="App" value="FitForge" />
-          <InfoRow label="AI Model" value="Claude claude-sonnet-4-6 (Anthropic)" />
+          <InfoRow label="AI Model" value="Claude Sonnet 4.6 (Anthropic)" />
           <InfoRow label="Version" value="1.0.0" />
+          <InfoRow label="Build" value={`#${BUILD_NUMBER} · ${BUILD_DATE} · ${GIT_HASH}`} />
         </Section>
 
         <View style={{ height: 32 }} />
