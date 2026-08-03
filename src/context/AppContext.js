@@ -2,27 +2,6 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { INITIAL_PROGRESS } from '../data/workoutData';
 import { generateWorkoutPlan } from '../utils/workoutGenerator';
-import { isTwoDumbbell } from '../utils/equipment';
-import { EXERCISES } from '../data/exerciseLibrary';
-
-// One-time migration: dumbbell weights are now PER DUMBBELL (gym standard).
-// Older logs for two-dumbbell moves recorded the combined weight of both
-// dumbbells, so halve them once. Single-DB, bodyweight and band logs are
-// unchanged. Guarded by a persisted flag so it never runs twice.
-function migratePerDbWeights(state) {
-  if (state.migrations?.perDbWeights) return state;
-  const setLogs = (state.progress?.setLogs || []).map(log => {
-    const ex = EXERCISES[log.exerciseId];
-    if (!ex || !log.weight) return log;
-    if (!isTwoDumbbell({ id: log.exerciseId, equipment: ex.equipment })) return log;
-    return { ...log, weight: Math.round((log.weight / 2) * 100) / 100 };
-  });
-  return {
-    ...state,
-    progress: { ...state.progress, setLogs },
-    migrations: { ...(state.migrations || {}), perDbWeights: true },
-  };
-}
 
 const AppContext = createContext(null);
 const STORAGE_KEY = '@fitforge_v3';
@@ -57,15 +36,13 @@ const defaultState = {
   swaps: {},
   // Local date key we last dismissed the "welcome back" prompt on.
   restartSnoozedOn: null,
-  // Fresh installs are already on the per-dumbbell convention.
-  migrations: { perDbWeights: true },
   isLoaded: false,
 };
 
 function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
-      return migratePerDbWeights({ ...state, ...action.payload, migrations: action.payload.migrations, isLoaded: true });
+      return { ...state, ...action.payload, isLoaded: true };
     case 'SET_LOADED':
       return { ...state, isLoaded: true };
     case 'SET_API_KEY':
