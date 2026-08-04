@@ -175,7 +175,7 @@ function getContextCard(progress, generatedPlan, userProfile, todayWorkout, toda
 }
 
 export default function HomeScreen({ navigation }) {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { userProfile, progress, generatedPlan } = state;
 
   // Force re-render every time this tab gains focus so date-sensitive
@@ -188,6 +188,7 @@ export default function HomeScreen({ navigation }) {
   const todayDone = progress.completedWorkouts.some(w => w.date === today);
   const nextWorkout = (todayDone || todayWorkout?.isRest) ? getNextWorkout(generatedPlan) : null;
   const nextSessionWorkout = getNextWorkout(generatedPlan);
+  const programWeek = getProgramWeek(progress.completedWorkouts, state.restart?.date);
   const lastCompletedWorkout = progress.completedWorkouts.length > 0
     ? [...progress.completedWorkouts].sort((a, b) => b.date.localeCompare(a.date))[0]
     : null;
@@ -238,7 +239,12 @@ export default function HomeScreen({ navigation }) {
     daysSinceLast != null && daysSinceLast >= RESTART_GAP_DAYS &&
     (!restart || restart.date <= lastActivity) &&
     state.restartSnoozedOn !== today;
-  const rampActive = !!restart && !(progress.completedWorkouts || []).some(w => w.date >= restart.date);
+  const rampActive = !!restart && (restart.factor ?? 1) < 1.0 && !(progress.completedWorkouts || []).some(w => w.date >= restart.date);
+  const programComplete = programWeek >= 13 && !showWelcomeBack;
+
+  function handleNewCycle() {
+    dispatch({ type: 'RESTART_PROGRAM', payload: { date: today, factor: 1.0, mode: 'cycle', weeksOff: 0 } });
+  }
   const weeksSinceLast = daysSinceLast != null ? Math.round(daysSinceLast / 7) : 0;
 
   return (
@@ -282,6 +288,20 @@ export default function HomeScreen({ navigation }) {
             <Text style={s.rampChipText}>
               Easing back in · loads set ~{Math.round((1 - (restart.factor ?? 1)) * 100)}% lighter
             </Text>
+          </View>
+        )}
+
+        {/* ── Programme complete ── */}
+        {programComplete && (
+          <View style={s.completeCard}>
+            <Ionicons name="trophy" size={22} color={colors.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.completeTitle}>12 weeks complete</Text>
+              <Text style={s.completeSub}>Your weights carry over — start cycle 2 whenever you're ready.</Text>
+            </View>
+            <TouchableOpacity style={s.completeBtn} onPress={handleNewCycle} activeOpacity={0.85}>
+              <Text style={s.completeBtnText}>Next cycle</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -639,6 +659,42 @@ const s = StyleSheet.create({
     fontFamily: 'Figtree_600SemiBold',
     fontSize: 11,
     color: colors.accentLight,
+  },
+
+  completeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: colors.heroCardDeep,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.warning + '55',
+  },
+  completeTitle: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 13,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  completeSub: {
+    fontFamily: 'Figtree_400Regular',
+    fontSize: 11,
+    color: colors.textSec,
+    lineHeight: 16,
+  },
+  completeBtn: {
+    backgroundColor: colors.warning,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  completeBtnText: {
+    fontFamily: 'Figtree_700Bold',
+    fontSize: 12,
+    color: '#1A1100',
   },
 
   heroCard: {

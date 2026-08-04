@@ -169,9 +169,10 @@ function makeEmptySets(exercise, setLogs, today) {
 }
 
 const PHASE_COLORS = {
-  'Base':       colors.info,
-  'Volume+':    colors.accent,
-  'Intensity+': colors.secondary,
+  'Foundation': colors.info,
+  'Build':      colors.accent,
+  'Strength':   colors.secondary,
+  'Complete':   colors.warning,
   'Deload':     colors.success,
 };
 
@@ -198,7 +199,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   // individual set logs) so it stays stable through the whole comeback session
   // rather than flipping the instant the first set is saved. During it we defer
   // to deterministic eased loads and skip the AI so nothing pushes weights up.
-  const rampActive = !!restart && !completedWorkouts.some(w => w.date >= restart.date);
+  const rampActive = !!restart && (restart.factor ?? 1) < 1.0 && !completedWorkouts.some(w => w.date >= restart.date);
 
   // Fetch AI starting-weight suggestions once per session load (gated on API key).
   // Completed sets are never overwritten — suggestions only feed input placeholders.
@@ -335,11 +336,11 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         </View>
       )}
 
-      <View style={[s.progressionBanner, { borderColor: PHASE_COLORS[mod.label] + '50' }]}>
+      <View style={[s.progressionBanner, { borderColor: (PHASE_COLORS[mod.label] || colors.accent) + '50' }]}>
         <View style={s.progressionLeft}>
-          <Text style={s.progressionWeek}>Week {programWeek} of 4</Text>
-          <View style={[s.progressionPill, { backgroundColor: PHASE_COLORS[mod.label] + '22' }]}>
-            <Text style={[s.progressionPillText, { color: PHASE_COLORS[mod.label] }]}>{mod.label}</Text>
+          <Text style={s.progressionWeek}>Week {Math.min(programWeek, 12)} of 12</Text>
+          <View style={[s.progressionPill, { backgroundColor: (PHASE_COLORS[mod.label] || colors.accent) + '22' }]}>
+            <Text style={[s.progressionPillText, { color: PHASE_COLORS[mod.label] || colors.accent }]}>{mod.label}</Text>
           </View>
         </View>
         <Text style={s.progressionPhase}>{mod.phase}</Text>

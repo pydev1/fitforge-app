@@ -9,6 +9,7 @@ import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
 import { fromLocalDateKey, toLocalDateKey } from '../utils/date';
+import { getProgramWeek } from '../utils/progression';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 40;
@@ -18,13 +19,13 @@ const CHART_CONFIG = {
   backgroundGradientTo: colors.surface,
   backgroundGradientFromOpacity: 1,
   backgroundGradientToOpacity: 1,
-  color: (opacity = 1) => `rgba(190, 242, 100, ${opacity})`,
+  color: (opacity = 1) => `rgba(56, 189, 248, ${opacity})`,
   labelColor: () => colors.textMuted,
   strokeWidth: 2.5,
   propsForDots: {
     r: '4',
     strokeWidth: '2',
-    stroke: '#BEF264',
+    stroke: colors.accent,
     fill: colors.bg,
   },
   propsForBackgroundLines: {
@@ -32,6 +33,18 @@ const CHART_CONFIG = {
     strokeDasharray: '4',
     strokeWidth: 1,
   },
+  decimalPlaces: 1,
+};
+
+const MINI_CHART_CONFIG = {
+  backgroundGradientFrom: colors.bg,
+  backgroundGradientTo: colors.bg,
+  backgroundGradientFromOpacity: 1,
+  backgroundGradientToOpacity: 1,
+  color: (opacity = 1) => `rgba(56, 189, 248, ${opacity})`,
+  labelColor: () => colors.textMuted,
+  strokeWidth: 2,
+  propsForDots: { r: '3', strokeWidth: '1', stroke: colors.accent, fill: colors.bg },
   decimalPlaces: 1,
 };
 
@@ -102,12 +115,24 @@ function getMuscleGroups(type) {
   return map[type] || type;
 }
 
+const GOAL_TEXT = {
+  lose_fat:        'Cut body fat while preserving lean muscle.',
+  build_muscle:    'Build muscle through progressive overload — strength comes first.',
+  recomposition:   'Recompose your body — lose fat and build muscle simultaneously.',
+  improve_posture: 'Strengthen posture muscles and reduce desk-related discomfort.',
+  general_fitness: 'Build a consistent training habit and improve overall fitness.',
+  endurance:       'Build cardiovascular endurance and muscular stamina.',
+};
+
+const PHASE_NAMES = ['Foundation', 'Build', 'Strength'];
+
 export default function ProgressScreen() {
   const { state, dispatch } = useApp();
   const { progress, userProfile, generatedPlan } = state;
   const [logModal, setLogModal] = useState(false);
   const [weightInput, setWeightInput] = useState('');
   const [waistInput, setWaistInput] = useState('');
+  const [expandedSession, setExpandedSession] = useState(null);
 
   const today = toLocalDateKey();
   const setLogs = progress.setLogs || [];
@@ -139,13 +164,12 @@ export default function ProgressScreen() {
 
   const recentPR = getMostRecentPR(setLogs);
 
-  // Rough week number based on first workout date
-  const firstDate = progress.completedWorkouts.length
-    ? new Date(progress.completedWorkouts[0].date)
-    : null;
-  const weekNum = firstDate
-    ? Math.max(1, Math.ceil((Date.now() - firstDate.getTime()) / (7 * 86400000)))
-    : null;
+  const programWeek  = getProgramWeek(progress.completedWorkouts, state.restart?.date);
+  const displayWeek  = Math.min(programWeek, 12);
+  const phaseNum     = Math.min(3, Math.ceil(displayWeek / 4));
+  const phaseName    = PHASE_NAMES[phaseNum - 1];
+  const primaryGoal  = userProfile.goals?.[0] || 'general_fitness';
+  const goalText     = GOAL_TEXT[primaryGoal] || GOAL_TEXT.general_fitness;
 
   useEffect(() => {
     if (logModal) {
@@ -200,9 +224,9 @@ export default function ProgressScreen() {
         <View style={s.header}>
           <View style={{ flex: 1 }}>
             <Text style={s.title}>How you're doing</Text>
-            {weekNum && (
+            {progress.completedWorkouts.length > 0 && (
               <Text style={s.subtitle}>
-                Week {weekNum} of 12 — building the habit. Numbers will follow.
+                Week {displayWeek} of 12 · Phase {phaseNum}: {phaseName}
               </Text>
             )}
           </View>
@@ -360,14 +384,51 @@ export default function ProgressScreen() {
                 const plan = generatedPlan?.workouts?.[w.type];
                 const dotColor = plan?.color || WORKOUT_COLORS[w.type] || colors.border;
                 const label = plan?.name || WORKOUT_LABELS[w.type] || w.type;
+                const isExpanded = expandedSession === w.date;
+                const sessionSets = setLogs.filter(l => l.date === w.date);
+                const byEx = {};
+                sessionSets.forEach(l => {
+                  const key = l.exerciseId;
+                  if (!byEx[key]) byEx[key] = { name: l.exerciseName || l.exerciseId || 'Exercise', sets: [] };
+                  byEx[key].sets.push(l);
+                });
+                const exGroups = Object.values(byEx);
                 return (
-                  <View key={`${w.date}-${i}`} style={s.workoutRow}>
-                    <View style={[s.workoutDot, { backgroundColor: dotColor }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.workoutType}>{label}</Text>
-                      <Text style={s.workoutMuscles}>{getMuscleGroups(w.type)}</Text>
-                    </View>
-                    <Text style={s.workoutDate}>{w.date}</Text>
+                  <View key={`${w.date}-${i}`}>
+                    <TouchableOpacity
+                      style={s.workoutRow}
+                      onPress={() => setExpandedSession(isExpanded ? null : w.date)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[s.workoutDot, { backgroundColor: dotColor }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.workoutType}>{label}</Text>
+                        <Text style={s.workoutMuscles}>{getMuscleGroups(w.type)}</Text>
+                      </View>
+                      <Text style={s.workoutDate}>{w.date}</Text>
+                      {exGroups.length > 0 && (
+                        <Ionicons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={14}
+                          color={colors.textMuted}
+                        />
+                      )}
+                    </TouchableOpacity>
+                    {isExpanded && exGroups.length > 0 && (
+                      <View style={s.sessionDetail}>
+                        {exGroups.map(({ name, sets }) => (
+                          <View key={sets[0]?.exerciseId || name} style={s.sessionExRow}>
+                            <Text style={s.sessionExName} numberOfLines={1}>{name}</Text>
+                            <Text style={s.sessionExSets}>
+                              {[...sets]
+                                .sort((a, b) => a.setNumber - b.setNumber)
+                                .map(l => l.weight === 0 ? `BW×${l.reps}` : `${l.weight}×${l.reps}`)
+                                .join('   ')}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 );
               })
@@ -379,9 +440,11 @@ export default function ProgressScreen() {
           <Ionicons name="trophy-outline" size={18} color={colors.warning} style={{ marginBottom: 8 }} />
           <Text style={s.goalTitle}>What you're working toward</Text>
           <Text style={s.goalText}>
-            Body recomposition: lose belly fat while gaining lean muscle.{'\n'}
-            Starting waist: {firstWaist?.value ?? userProfile.waist} cm → under {targetWaist} cm.{'\n'}
-            Stay consistent — recomp takes 3–6 months to show clearly.
+            {goalText}
+            {(firstWaist?.value ?? userProfile.waist)
+              ? `\nStarting waist: ${firstWaist?.value ?? userProfile.waist} cm → target ${targetWaist} cm.`
+              : ''}
+            {'\nStay consistent — visible changes take 8–12 weeks.'}
           </Text>
         </View>
 
@@ -510,6 +573,13 @@ function StrengthProgress({ setLogs }) {
           .sort(([a], [b]) => b.localeCompare(a))
           .slice(0, 8);
 
+        // Mini chart data — up to 6 sessions, oldest first, max weight per session
+        const distinctDates = new Set(logs.map(l => l.date));
+        const chartSessions = dateHistory.slice(0, 6).reverse();
+        const allBodyweight = chartSessions.every(([, sl]) => sl.every(l => l.weight === 0));
+        const chartLabels = chartSessions.map(([d]) => d.slice(5));
+        const chartWeights = chartSessions.map(([, sl]) => Math.max(...sl.map(l => l.weight)));
+
         return (
           <View key={exId} style={[sp.row, isLast && !isExpanded && { borderBottomWidth: 0 }]}>
             <TouchableOpacity
@@ -539,6 +609,18 @@ function StrengthProgress({ setLogs }) {
 
             {isExpanded && (
               <View style={sp.history}>
+                {distinctDates.size >= 2 && chartSessions.length >= 2 && !allBodyweight && (
+                  <LineChart
+                    data={{ labels: chartLabels, datasets: [{ data: chartWeights }] }}
+                    width={CHART_W - 52}
+                    height={90}
+                    chartConfig={MINI_CHART_CONFIG}
+                    bezier
+                    style={{ borderRadius: 8, marginBottom: 10 }}
+                    withInnerLines={false}
+                    withOuterLines={false}
+                  />
+                )}
                 <Text style={sp.historyTitle}>Session history</Text>
                 {dateHistory.map(([date, sessionLogs]) => {
                   const sessionSorted = [...sessionLogs].sort((a, b) => a.setNumber - b.setNumber);
@@ -653,7 +735,7 @@ const s = StyleSheet.create({
   },
   prIconWrap: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: 'rgba(190,242,100,0.16)',
+    backgroundColor: 'rgba(56,189,248,0.16)',
     alignItems: 'center', justifyContent: 'center',
   },
   prTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text, marginBottom: 3 },
@@ -695,6 +777,30 @@ const s = StyleSheet.create({
   workoutMuscles: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textSec, marginTop: 1 },
   workoutDate: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted },
   emptyText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
+
+  sessionDetail: {
+    backgroundColor: colors.bg,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 4,
+    gap: 6,
+  },
+  sessionExRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sessionExName: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 12,
+    color: colors.textSec,
+    flex: 1,
+  },
+  sessionExSets: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 12,
+    color: colors.text,
+  },
 
   goalCard: {
     marginHorizontal: 20, marginTop: 14,
