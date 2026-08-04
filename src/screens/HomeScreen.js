@@ -7,7 +7,12 @@ import { useApp } from '../context/AppContext';
 import { MOTIVATIONAL_QUOTES } from '../data/workoutData';
 import { colors } from '../theme/colors';
 import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
-import { RESTART_GAP_DAYS } from '../utils/progression';
+import {
+  RESTART_GAP_DAYS, getProgramWeek, getProgressionModifier,
+  applyProgression, isBandExercise, getNextSessionWeight,
+} from '../utils/progression';
+import { isTwoDumbbell, getDumbbellLadder } from '../utils/equipment';
+import { makeWorkoutExercise } from '../utils/workoutGenerator';
 
 function getLastActivityDate(progress) {
   const dates = [
@@ -425,6 +430,18 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
 
+        {/* ── Next session prep card ── */}
+        {getNextWorkout(generatedPlan) && (
+          <NextSessionPrepCard
+            nextWorkout={getNextWorkout(generatedPlan)}
+            setLogs={progress.setLogs || []}
+            restart={state.restart}
+            completedWorkouts={progress.completedWorkouts}
+            swaps={state.swaps}
+            primaryGoal={userProfile.goals?.[0] || 'general_fitness'}
+          />
+        )}
+
         {/* ── Plan chip ── */}
         {generatedPlan && (
           <View style={s.planChip}>
@@ -456,6 +473,69 @@ export default function HomeScreen({ navigation }) {
         <View style={{ height: 28 }} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts, swaps, primaryGoal }) {
+  const today = toLocalDateKey();
+  const programWeek = getProgramWeek(completedWorkouts, restart?.date);
+  const mod = getProgressionModifier(programWeek);
+  const { workout, daysUntil, dayName } = nextWorkout;
+
+  const rows = (workout.exercises || []).map(orig => {
+    const altId = swaps?.[orig.id];
+    const base = altId ? (makeWorkoutExercise(altId, primaryGoal) || orig) : orig;
+    const ex = applyProgression(base, mod);
+    const isBand = isBandExercise(ex.equipment);
+    const twoDb = isTwoDumbbell(ex);
+    const hasDumbbell = !!getDumbbellLadder(ex);
+    const weight = isBand ? null : getNextSessionWeight(setLogs, ex, today, mod.isDeload, restart);
+
+    let weightLabel;
+    if (isBand)          weightLabel = 'Band';
+    else if (weight === 0) weightLabel = 'Bodyweight';
+    else if (weight == null) weightLabel = 'New';
+    else                 weightLabel = `${weight} ${twoDb ? 'kg/db' : 'kg'}`;
+
+    return { id: ex.id, name: ex.name, sets: ex.sets, reps: ex.reps, weight, weightLabel, hasDumbbell, isNew: weight == null && !isBand };
+  });
+
+  // Deduplicated, sorted dumbbell weights for the "set out" summary
+  const dbWeights = [...new Set(
+    rows.filter(r => r.hasDumbbell && r.weight > 0).map(r => r.weight)
+  )].sort((a, b) => a - b);
+
+  const whenStr = daysUntil === 1 ? 'Tomorrow' : daysUntil >= 7 ? `Next ${dayName}` : dayName;
+
+  return (
+    <View style={pc.card}>
+      <View style={pc.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={pc.eyebrow}>PREP · {whenStr.toUpperCase()}</Text>
+          <Text style={pc.title}>{workout.name}</Text>
+          <Text style={pc.focus}>{workout.focus}</Text>
+        </View>
+        <Ionicons name="barbell-outline" size={22} color={colors.accent} />
+      </View>
+
+      <View style={pc.divider} />
+
+      {rows.map(row => (
+        <View key={row.id} style={pc.row}>
+          <Text style={pc.exName} numberOfLines={1}>{row.name}</Text>
+          <Text style={pc.meta}>{row.sets}×{row.reps}</Text>
+          <Text style={[pc.weight, row.isNew && pc.weightNew]}>{row.weightLabel}</Text>
+        </View>
+      ))}
+
+      {dbWeights.length > 0 && (
+        <View style={pc.setOut}>
+          <Ionicons name="cube-outline" size={12} color={colors.accent} />
+          <Text style={pc.setOutLabel}>Set out: </Text>
+          <Text style={pc.setOutWeights}>{dbWeights.join('  ·  ')} kg</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -868,5 +948,93 @@ const hs = StyleSheet.create({
     fontSize: 10,
     color: colors.heroTextMuted,
     marginTop: 2,
+  },
+});
+
+const pc = StyleSheet.create({
+  card: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    backgroundColor: colors.heroCardDeep,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.heroCardBorder,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  eyebrow: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 10,
+    color: colors.accent,
+    letterSpacing: 1.2,
+    marginBottom: 2,
+  },
+  title: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 20,
+    color: colors.heroText,
+    letterSpacing: 0.5,
+  },
+  focus: {
+    fontFamily: 'Figtree_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: 10,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  exName: {
+    flex: 1,
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 13,
+    color: colors.text,
+  },
+  meta: {
+    fontFamily: 'Figtree_400Regular',
+    fontSize: 12,
+    color: colors.textMuted,
+    marginRight: 10,
+  },
+  weight: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 13,
+    color: colors.accentLight,
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  weightNew: {
+    color: colors.textMuted,
+    fontFamily: 'Figtree_400Regular_Italic',
+  },
+  setOut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  setOutLabel: {
+    fontFamily: 'Figtree_500Medium',
+    fontSize: 11,
+    color: colors.textMuted,
+    marginLeft: 5,
+  },
+  setOutWeights: {
+    fontFamily: 'Figtree_600SemiBold',
+    fontSize: 11,
+    color: colors.accent,
   },
 });

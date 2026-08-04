@@ -1,4 +1,5 @@
 import { daysBetweenLocalDateKeys, fromLocalDateKey } from './date';
+import { getDumbbellLadder, snapToLoad, nextLoadUp, nextLoadDown } from './equipment';
 
 const SCHEME = [
   { week: 1, label: 'Base',       phase: 'Establish your baseline',          deltaSets:  0, deltaReps:  0, isDeload: false },
@@ -69,6 +70,37 @@ export const BAND_SWAPS = {
   face_pull:       'rear_delt_fly',
   band_row:        'bent_over_row',
 };
+
+// Predict the starting weight for the next session of an exercise.
+// Used by WorkoutScreen (active session) via getProgressionSuggestion,
+// and by the NextSessionPrepCard (read-only preview on Home).
+// Returns null when there is no history yet.
+export function getNextSessionWeight(setLogs, exercise, today, isDeload, restart) {
+  const past = (setLogs || [])
+    .filter(l => l.exerciseId === exercise.id && l.date !== (today || ''))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!past.length) return null;
+
+  const lastDate = past[0].date;
+  const lastSession = past
+    .filter(l => l.date === lastDate)
+    .sort((a, b) => a.setNumber - b.setNumber);
+  const finalSet = lastSession[lastSession.length - 1];
+  if (!finalSet) return null;
+
+  const baseWeight = finalSet.weight;
+  const ladder = getDumbbellLadder(exercise);
+  const snap = v => (ladder ? snapToLoad(v, ladder) : Math.round(v * 2) / 2);
+
+  if (restart && lastDate < restart.date) return snap(baseWeight * restart.factor);
+  if (isDeload) return snap(baseWeight * 0.6);
+  if (!ladder) return baseWeight;   // bodyweight — no external load to step
+
+  const anyHard = lastSession.some(l => l.feedback === 'hard');
+  if (finalSet.feedback === 'easy' && !anyHard) return nextLoadUp(baseWeight, ladder);
+  if (anyHard) return nextLoadDown(baseWeight, ladder);
+  return snap(baseWeight);
+}
 
 export function getProgressionModifier(programWeek) {
   return SCHEME[(programWeek - 1) % 4];
