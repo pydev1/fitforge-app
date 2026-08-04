@@ -187,6 +187,7 @@ export default function HomeScreen({ navigation }) {
   const todayWorkout = getTodayWorkout(generatedPlan);
   const todayDone = progress.completedWorkouts.some(w => w.date === today);
   const nextWorkout = (todayDone || todayWorkout?.isRest) ? getNextWorkout(generatedPlan) : null;
+  const nextSessionWorkout = getNextWorkout(generatedPlan);
   const lastCompletedWorkout = progress.completedWorkouts.length > 0
     ? [...progress.completedWorkouts].sort((a, b) => b.date.localeCompare(a.date))[0]
     : null;
@@ -431,9 +432,9 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {/* ── Next session prep card ── */}
-        {getNextWorkout(generatedPlan) && (
+        {nextSessionWorkout && (
           <NextSessionPrepCard
-            nextWorkout={getNextWorkout(generatedPlan)}
+            nextWorkout={nextSessionWorkout}
             setLogs={progress.setLogs || []}
             restart={state.restart}
             completedWorkouts={progress.completedWorkouts}
