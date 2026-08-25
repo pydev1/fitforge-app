@@ -854,8 +854,11 @@ function deriveFeedback(repsStr, repsTarget, isAmrap, predicted) {
   const { min, max } = parseRepRange(repsTarget);
   if (predicted != null) {
     // 1-rep grace: predictions extrapolate from load change, so a whisker
-    // under target is still "on target", not a miss.
-    if (done < predicted - 1) return 'hard';
+    // under target is still "on target", not a miss. Falling below the
+    // exercise's own prescribed minimum is always "hard" too — mirrors the
+    // max-side backstop below, so a string of big weight jumps can't drag
+    // "predicted" low enough to mask a genuinely too-heavy set.
+    if (done < predicted - 1 || done < min) return 'hard';
     // "Predicted" tracks last session's own reps, so after a big weight drop
     // (e.g. a deload) it can ratchet up right alongside inflated rep counts
     // and never get beaten — permanently stalling the weight. The exercise's
@@ -883,8 +886,13 @@ function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload, re
     .filter(l => l.date === lastDate)
     .sort((a, b) => a.setNumber - b.setNumber);
 
-  const sameSet = lastSession.find(l => l.setNumber === setIdx + 1);
-  const baseWeight = sameSet ? sameSet.weight : lastSession[lastSession.length - 1].weight;
+  // Base weight always comes from the final (max) set — matching the decision
+  // below and the doc comment's promise of "applied uniformly to every set".
+  // Previously this looked up the same set NUMBER from last session instead,
+  // which silently diverged from that promise whenever weight varied across
+  // sets (e.g. a pyramid) or the set count changed between sessions.
+  const finalSet = lastSession[lastSession.length - 1];
+  const baseWeight = finalSet.weight;
 
   // Snap every kg output to a load the user can actually build from their kit.
   // Non-dumbbell moves (bodyweight) have no ladder, so they fall back to 0.5kg.
@@ -897,7 +905,6 @@ function getProgressionSuggestion(setLogs, exercise, setIdx, today, isDeload, re
   if (restart && lastDate < restart.date) return snap(baseWeight * restart.factor);
   if (isDeload) return snap(baseWeight * 0.6);
 
-  const finalSet = lastSession[lastSession.length - 1];
   const anyHard = lastSession.some(l => l.feedback === 'hard');
 
   // Bodyweight moves carry no external load, so there's nothing to step.

@@ -74,8 +74,17 @@ export function getProgramWeek(completedWorkouts, anchorDateKey) {
 }
 
 // Returns the SCHEME entry for a given programme week.
-// Week 13+ safely falls back to week 12 (deload) so callers never get undefined.
+// Week 12 is a real one-week deload ("Final recovery"). Week 13+ means the
+// 12-week programme has actually finished and the user hasn't started cycle 2
+// yet (Home screen's "Next cycle" button) — falling back to week 12's entry
+// here would keep applying its 60% deload cut every session, compounding
+// lower and lower forever. Hold steady instead until cycle 2 begins.
+const PROGRAMME_COMPLETE = {
+  week: 13, label: 'Complete', phase: 'Programme complete — start cycle 2 on Home',
+  deltaSets: 0, deltaReps: 0, isDeload: false,
+};
 export function getProgressionModifier(programWeek) {
+  if (programWeek >= 13) return PROGRAMME_COMPLETE;
   const idx = Math.min(programWeek, 12) - 1;
   return SCHEME[Math.max(0, idx)];
 }
