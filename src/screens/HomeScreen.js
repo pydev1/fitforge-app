@@ -539,6 +539,16 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
         <Ionicons name="barbell-outline" size={22} color={colors.accent} />
       </View>
 
+      {mod.isDeload && (
+        <View style={pc.deloadBanner}>
+          <Ionicons name="leaf" size={13} color={colors.success} />
+          <Text style={pc.deloadText}>
+            <Text style={pc.deloadTextStrong}>Deload week — recover.</Text>
+            {' '}Weights below are eased ~40%, not your working weights.
+          </Text>
+        </View>
+      )}
+
       <View style={pc.divider} />
 
       {rows.map(row => (
@@ -1046,6 +1056,26 @@ const pc = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginBottom: 10,
+  },
+  deloadBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: colors.success + '15',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 10,
+  },
+  deloadText: {
+    flex: 1,
+    fontFamily: 'Figtree_400Regular',
+    fontSize: 11,
+    color: colors.textSec,
+    lineHeight: 15,
+  },
+  deloadTextStrong: {
+    fontFamily: 'Figtree_600SemiBold',
+    color: colors.success,
   },
   row: {
     flexDirection: 'row',

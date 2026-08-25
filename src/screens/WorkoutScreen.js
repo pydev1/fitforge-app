@@ -851,14 +851,19 @@ function getRepPrediction(lastSession, setIdx, plannedWeight) {
 function deriveFeedback(repsStr, repsTarget, isAmrap, predicted) {
   const done = parseInt(repsStr, 10);
   if (!done) return 'good';
+  const { min, max } = parseRepRange(repsTarget);
   if (predicted != null) {
     // 1-rep grace: predictions extrapolate from load change, so a whisker
     // under target is still "on target", not a miss.
     if (done < predicted - 1) return 'hard';
-    if (isAmrap && done >= predicted + 2) return 'easy';
+    // "Predicted" tracks last session's own reps, so after a big weight drop
+    // (e.g. a deload) it can ratchet up right alongside inflated rep counts
+    // and never get beaten — permanently stalling the weight. The exercise's
+    // own prescribed range is the backstop: clearing it on the AMRAP set is
+    // always "easy", no matter what the rolling prediction says.
+    if (isAmrap && (done >= predicted + 2 || (isFinite(max) && done >= max))) return 'easy';
     return 'good';
   }
-  const { min, max } = parseRepRange(repsTarget);
   if (done < min) return 'hard';
   if (isAmrap && isFinite(max) && done >= max) return 'easy';
   return 'good';
