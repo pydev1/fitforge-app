@@ -189,8 +189,8 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const swaps = state.swaps || {};
   const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
 
-  // The 4-week cycle restarts at Base from the restart date, so a long layoff
-  // doesn't leave you mid-cycle (or on a phantom deload week).
+  // The 12-week programme restarts at week 1 from the restart date, so a long
+  // layoff doesn't leave you mid-cycle (or on a phantom deload week).
   const programWeek = getProgramWeek(completedWorkouts, restart?.date);
   const mod = getProgressionModifier(programWeek);
 

@@ -324,8 +324,8 @@ export default function SettingsScreen({ navigation }) {
             </TouchableOpacity>
           )}
           <Text style={s.regenNote}>
-            Been away for a while? This eases your suggested weights back down and restarts the 4-week cycle — your
-            measurements, logs and personal bests are kept.
+            Been away for a while? This eases your suggested weights back down and restarts the 12-week programme
+            from Week 1 — your measurements, logs and personal bests are kept.
           </Text>
         </Section>
 

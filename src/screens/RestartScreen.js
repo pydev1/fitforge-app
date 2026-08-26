@@ -157,8 +157,8 @@ export default function RestartScreen({ navigation }) {
             </View>
           ))}
           <Text style={s.keepNote}>
-            We only ease your next few suggested loads and reset the 4-week cycle to Base. Your records stay exactly
-            as they are.
+            We only ease your next few suggested loads and reset the 12-week programme to Week 1. Your records stay
+            exactly as they are.
           </Text>
         </View>
 

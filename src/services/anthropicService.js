@@ -48,6 +48,10 @@ Rules:
 - If last session sets were mostly "easy", increase by 5-10%
 - If last session sets were mostly "hard", decrease by 5%
 - If mixed or "good", small increase (~2.5%) if positive multi-session trend, otherwise maintain
+- Override all of the above if last session's actual reps ran well past the
+  top of that exercise's target range (shown as "target:Xreps" above), even
+  if tagged "good" — that means the weight is now too light regardless of
+  the recent trend, and warrants a real increase (10%+), not "maintain"
 - Base suggestion on actual logged weights, not assumptions
 - Bodyweight (BW) exercises should return weight null`;
 
