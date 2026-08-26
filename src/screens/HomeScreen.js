@@ -11,8 +11,9 @@ import {
   RESTART_GAP_DAYS, getProgramWeek, getProgressionModifier,
   applyProgression, isBandExercise, getNextSessionWeight,
 } from '../utils/progression';
-import { isTwoDumbbell, getDumbbellLadder } from '../utils/equipment';
+import { isTwoDumbbell, getDumbbellLadder, snapToLoad } from '../utils/equipment';
 import { makeWorkoutExercise } from '../utils/workoutGenerator';
+import { getWorkoutSuggestions } from '../services/anthropicService';
 
 function getLastActivityDate(progress) {
   const dates = [
@@ -498,19 +499,67 @@ export default function HomeScreen({ navigation }) {
 }
 
 function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts, swaps, primaryGoal }) {
+  const { state } = useApp();
   const today = toLocalDateKey();
   const programWeek = getProgramWeek(completedWorkouts, restart?.date);
   const mod = getProgressionModifier(programWeek);
   const { workout, daysUntil, dayName } = nextWorkout;
 
-  const rows = (workout.exercises || []).map(orig => {
+  // "Ramp" mirrors WorkoutScreen's gate: during a post-restart easing block,
+  // deterministic eased loads are enforced and the AI is skipped entirely.
+  const rampActive = !!restart && (restart.factor ?? 1) < 1.0 && !completedWorkouts.some(w => w.date >= restart.date);
+
+  // Progressed + swapped exercises — same objects WorkoutScreen will render
+  // tomorrow (correct phase-adjusted rep target, correct swapped identity),
+  // not the raw plan. Built once and reused for both the AI call and the rows
+  // below so the two can never drift apart from each other.
+  const progressedExercises = (workout.exercises || []).map(orig => {
     const altId = swaps?.[orig.id];
     const base = altId ? (makeWorkoutExercise(altId, primaryGoal) || orig) : orig;
-    const ex = applyProgression(base, mod);
+    return applyProgression(base, mod);
+  });
+
+  // Fetch the SAME AI suggestions WorkoutScreen will use tomorrow, so this
+  // preview doesn't quietly diverge from what actually shows up on the day —
+  // the whole point of "prep the night before" breaks if the two disagree.
+  const [aiSuggestions, setAiSuggestions] = React.useState({});
+  React.useEffect(() => {
+    if (!progressedExercises.length || !state.apiKey || mod.isDeload || rampActive) {
+      setAiSuggestions({});
+      return;
+    }
+    let cancelled = false;
+    getWorkoutSuggestions(progressedExercises, setLogs, state.userProfile, state.apiKey)
+      .then(res => {
+        if (cancelled || !res?.suggestions) return;
+        const map = {};
+        res.suggestions.forEach(sug => { if (sug.weight != null) map[sug.id] = sug; });
+        setAiSuggestions(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [workout?.id, state.apiKey, mod.isDeload, rampActive]);
+
+  const rows = progressedExercises.map(ex => {
     const isBand = isBandExercise(ex.equipment);
     const twoDb = isTwoDumbbell(ex);
-    const hasDumbbell = !!getDumbbellLadder(ex);
-    const weight = isBand ? null : getNextSessionWeight(setLogs, ex, today, mod.isDeload, restart);
+    const ladder = getDumbbellLadder(ex);
+    const hasDumbbell = !!ladder;
+    const ruleWeight = isBand ? null : getNextSessionWeight(setLogs, ex, today, mod.isDeload, restart);
+
+    // Same exercise-level restart-easing check WorkoutScreen makes (has this
+    // specific exercise been retrained since the restart date yet?), so the
+    // AI-vs-rule precedence matches exactly, not just the deload/ramp gate.
+    const lastLog = setLogs
+      .filter(l => l.exerciseId === ex.id)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    const restartActiveForEx = !!restart && !!lastLog && lastLog.date < restart.date;
+
+    const aiWeight = aiSuggestions[ex.id]?.weight;
+    const rawWeight = isBand ? null
+      : (mod.isDeload || restartActiveForEx) ? ruleWeight
+      : (aiWeight != null ? aiWeight : ruleWeight);
+    const weight = rawWeight != null && ladder ? snapToLoad(rawWeight, ladder) : rawWeight;
 
     let weightLabel;
     if (isBand)          weightLabel = 'Band';
@@ -518,7 +567,7 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
     else if (weight == null) weightLabel = 'New';
     else                 weightLabel = `${weight} ${twoDb ? 'kg/db' : 'kg'}`;
 
-    return { id: ex.id, name: ex.name, sets: ex.sets, reps: ex.reps, weight, weightLabel, hasDumbbell, isNew: weight == null && !isBand };
+    return { id: ex.id, name: ex.name, sets: ex.sets, reps: ex.reps, weight, weightLabel, hasDumbbell, isNew: weight == null && !isBand, isAi: aiWeight != null && !mod.isDeload && !restartActiveForEx };
   });
 
   // Deduplicated, sorted dumbbell weights for the "set out" summary
@@ -527,6 +576,7 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
   )].sort((a, b) => a - b);
 
   const whenStr = daysUntil === 1 ? 'Tomorrow' : daysUntil >= 7 ? `Next ${dayName}` : dayName;
+  const usesAi = rows.some(r => r.isAi);
 
   return (
     <View style={pc.card}>
@@ -546,6 +596,12 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
             <Text style={pc.deloadTextStrong}>Deload week — recover.</Text>
             {' '}Weights below are eased ~40%, not your working weights.
           </Text>
+        </View>
+      )}
+
+      {!mod.isDeload && usesAi && (
+        <View style={pc.aiNote}>
+          <Text style={pc.aiNoteText}>✦ AI-adjusted — matches what tomorrow's workout screen will show</Text>
         </View>
       )}
 
@@ -1076,6 +1132,14 @@ const pc = StyleSheet.create({
   deloadTextStrong: {
     fontFamily: 'Figtree_600SemiBold',
     color: colors.success,
+  },
+  aiNote: {
+    marginBottom: 10,
+  },
+  aiNoteText: {
+    fontFamily: 'Figtree_400Regular_Italic',
+    fontSize: 10,
+    color: colors.accentLight,
   },
   row: {
     flexDirection: 'row',

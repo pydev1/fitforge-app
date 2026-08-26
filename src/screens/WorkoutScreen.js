@@ -214,7 +214,12 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
     }
     let cancelled = false;
     setAiLoading(true);
-    getWorkoutSuggestions(workout.exercises, state.progress.setLogs || [], state.userProfile, state.apiKey)
+    // Progressed + swapped exercises, not the raw plan — otherwise the AI is
+    // told this week's base rep target (e.g. "12-15") instead of the actual
+    // phase-adjusted one shown on screen (e.g. "11-14"), and is blind to any
+    // exercise swap, undermining its own "reps ran past target" judgement.
+    const aiExercises = workout.exercises.map(orig => applyProgression(resolveExercise(orig, swaps, primaryGoal), mod));
+    getWorkoutSuggestions(aiExercises, state.progress.setLogs || [], state.userProfile, state.apiKey)
       .then(res => {
         if (cancelled || !res?.suggestions) return;
         const map = {};
