@@ -832,15 +832,37 @@ function parseRepRange(reps) {
 // shape instead of showing the flat top of the prescribed range for every set.
 function getRepPrediction(lastSession, setIdx, plannedWeight) {
   if (!lastSession?.sets?.length) return null;
-  const same = lastSession.sets.find(l => l.setNumber === setIdx + 1)
-    || lastSession.sets[lastSession.sets.length - 1];
-  if (!same?.reps) return null;
+  const sets = lastSession.sets;
+  const targetSetNum = setIdx + 1;
+  const same = sets.find(l => l.setNumber === targetSetNum);
+  const last = sets[sets.length - 1];
+  if (!last?.reps) return null;
+
+  let baseReps, refWeight;
+  if (same) {
+    baseReps = same.reps;
+    refWeight = same.weight;
+  } else {
+    // Today prescribes more sets than were actually logged last time (e.g.
+    // only 2 of 4 sets got done). Flatly repeating the last known set for
+    // every set beyond it would predict the SAME (or, on the AMRAP set, a
+    // "X+") target as the set before — fatigue never works that way. Extend
+    // the decline actually observed within that session instead.
+    const first = sets[0];
+    const span = last.setNumber - first.setNumber;
+    const perSetDecline = span > 0 ? (first.reps - last.reps) / span : 0;
+    const stepsBeyond = targetSetNum - last.setNumber;
+    baseReps = last.reps - perSetDecline * stepsBeyond;
+    refWeight = last.weight;
+  }
+  if (!baseReps) return null;
+
   let adj = 0;
-  if (plannedWeight != null && same.weight > 0) {
-    adj = Math.round(((same.weight - plannedWeight) / same.weight) / 0.035);
+  if (plannedWeight != null && refWeight > 0) {
+    adj = Math.round(((refWeight - plannedWeight) / refWeight) / 0.035);
     adj = Math.max(-4, Math.min(4, adj)); // cap: load-change extrapolation is rough
   }
-  return Math.max(1, same.reps + adj);
+  return Math.max(1, Math.round(baseReps + adj));
 }
 
 // Objectively rate a set from reps alone — no "feel" guess required.
