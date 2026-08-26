@@ -5,6 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 import { useApp } from '../context/AppContext';
 
 import HomeScreen from '../screens/HomeScreen';
@@ -42,7 +43,7 @@ function MainTabs() {
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
-          fontFamily: 'Figtree_600SemiBold',
+          fontFamily: fonts.dataMedium,
           fontSize: 10,
         },
         tabBarIcon: ({ focused, color }) => {

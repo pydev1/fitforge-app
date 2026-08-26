@@ -624,9 +624,9 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
       {/* Legend */}
       <View style={s.weekLegend}>
         {[
-          { color: '#34D399', label: 'Done' },
-          { color: '#22D3EE', label: 'Upcoming' },
-          { color: '#4b5563', label: 'Rest' },
+          { color: colors.success, label: 'Done' },
+          { color: colors.info, label: 'Upcoming' },
+          { color: colors.textMuted, label: 'Rest' },
         ].map(({ color, label }) => (
           <View key={label} style={s.weekLegendItem}>
             <View style={[s.weekLegendDot, { backgroundColor: color }]} />
@@ -646,7 +646,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
         const isExpanded = expandedDay === day;
         const dayDate = weekDates[day];
         const isCompleted = completedWorkouts.some(w => w.date === dayDate);
-        const dotColor = !workout ? '#4b5563' : isCompleted ? '#34D399' : '#22D3EE';
+        const dotColor = !workout ? colors.textMuted : isCompleted ? colors.success : colors.info;
 
         return (
           <TouchableOpacity

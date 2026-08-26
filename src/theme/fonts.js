@@ -1,8 +1,15 @@
+// Three type roles: a condensed display face for big numbers and titles, a
+// body face for prose and labels, and a monospace face for every LOGGED
+// number (kg, reps, streaks) so columns of figures line up like a logbook.
 export const fonts = {
-  display: 'BebasNeue_400Regular',  // large numbers, screen titles
-  body: 'Figtree_400Regular',
-  bodyMedium: 'Figtree_500Medium',
-  bodySemiBold: 'Figtree_600SemiBold',
-  bodyBold: 'Figtree_700Bold',
-  bodyItalic: 'Figtree_400Regular_Italic',
+  display: 'BigShoulders_900Black',
+  body: 'IBMPlexSans_400Regular',
+  bodyItalic: 'IBMPlexSans_400Regular_Italic',
+  bodyMedium: 'IBMPlexSans_500Medium',
+  bodySemiBold: 'IBMPlexSans_600SemiBold',
+  bodyBold: 'IBMPlexSans_700Bold',
+  bodyBoldItalic: 'IBMPlexSans_700Bold_Italic',
+  data: 'IBMPlexMono_400Regular',
+  dataMedium: 'IBMPlexMono_500Medium',
+  dataSemiBold: 'IBMPlexMono_600SemiBold',
 };

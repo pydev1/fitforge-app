@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
 import { weeksAway, detrainingFactor, RESTART_MODES } from '../utils/progression';
 
@@ -190,11 +191,11 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
   heroTitle: {
-    fontFamily: 'BebasNeue_400Regular', fontSize: 44, color: colors.text,
+    fontFamily: fonts.display, fontSize: 44, color: colors.text,
     letterSpacing: 2, lineHeight: 46,
   },
   heroSub: {
-    fontFamily: 'Figtree_400Regular_Italic', fontSize: 14, color: colors.textSec,
+    fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textSec,
     textAlign: 'center', marginTop: 6, lineHeight: 20, paddingHorizontal: 10,
   },
 
@@ -203,10 +204,10 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  cardHeadText: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.accentLight },
-  cardTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text, marginBottom: 4 },
-  cardCaption: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textMuted, lineHeight: 17, marginBottom: 14 },
-  body: { fontFamily: 'Figtree_400Regular', fontSize: 13, color: colors.textSec, lineHeight: 20 },
+  cardHeadText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.accentLight },
+  cardTitle: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.text, marginBottom: 4 },
+  cardCaption: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, lineHeight: 17, marginBottom: 14 },
+  body: { fontFamily: fonts.body, fontSize: 13, color: colors.textSec, lineHeight: 20 },
 
   chart: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, height: 120 },
   chartCol: { flex: 1, alignItems: 'center' },
@@ -215,11 +216,11 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end', overflow: 'hidden',
   },
   chartFill: { width: '100%', borderRadius: 8 },
-  chartPct: { fontFamily: 'Figtree_700Bold', fontSize: 12, color: colors.text, marginTop: 6 },
-  chartLabel: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: colors.textMuted, marginTop: 1 },
+  chartPct: { fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.text, marginTop: 6 },
+  chartLabel: { fontFamily: fonts.dataMedium, fontSize: 10, color: colors.textMuted, marginTop: 1 },
 
   sectionLabel: {
-    fontFamily: 'Figtree_700Bold', fontSize: 12, color: colors.textSec,
+    fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.textSec,
     textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 8, marginBottom: 10,
   },
   modeCard: {
@@ -235,24 +236,24 @@ const s = StyleSheet.create({
   radioOn: { borderColor: colors.accent },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
   modeTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  modeLabel: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.textSec },
-  modePct: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.textMuted },
-  modeBlurb: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 3 },
+  modeLabel: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.textSec },
+  modePct: { fontFamily: fonts.dataSemiBold, fontSize: 13, color: colors.textMuted },
+  modeBlurb: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 3 },
 
   keepCard: {
     backgroundColor: colors.surface, borderRadius: 16, padding: 16, marginTop: 12, marginBottom: 20,
     borderWidth: 1, borderColor: colors.border,
   },
-  keepTitle: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.text, marginBottom: 10 },
+  keepTitle: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.text, marginBottom: 10 },
   keepRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  keepText: { fontFamily: 'Figtree_500Medium', fontSize: 13, color: colors.textSec, flex: 1 },
-  keepNote: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
+  keepText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.textSec, flex: 1 },
+  keepNote: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
 
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: colors.accent, borderRadius: 16, paddingVertical: 16,
   },
-  primaryBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.onAccent },
+  primaryBtnText: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.onAccent },
   secondaryBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 14, marginTop: 4 },
-  secondaryBtnText: { fontFamily: 'Figtree_500Medium', fontSize: 13, color: colors.textMuted },
+  secondaryBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.textMuted },
 });

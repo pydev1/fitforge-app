@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 import { fromLocalDateKey, toLocalDateKey } from '../utils/date';
 import { getProgramWeek } from '../utils/progression';
 
@@ -652,7 +653,7 @@ function StrengthProgress({ setLogs }) {
   );
 }
 
-const FEEL_COLORS = { easy: '#34D399', good: '#22D3EE', hard: '#FB7185' };
+const FEEL_COLORS = { easy: colors.success, good: colors.info, hard: colors.secondary };
 
 function EmptyChart({ message }) {
   return (
@@ -694,15 +695,15 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10,
   },
-  title: { fontFamily: 'BebasNeue_400Regular', fontSize: 34, color: colors.text, letterSpacing: 0.5 },
-  subtitle: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textSec, marginTop: 3, lineHeight: 19 },
+  title: { fontFamily: fonts.display, fontSize: 34, color: colors.text, letterSpacing: 0.5 },
+  subtitle: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textSec, marginTop: 3, lineHeight: 19 },
   logBtn: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.accent,
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 4,
     marginTop: 4,
   },
-  logBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.onAccent },
+  logBtnText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.onAccent },
 
   statRow: {
     flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 4, gap: 10,
@@ -717,14 +718,14 @@ const s = StyleSheet.create({
     backgroundColor: colors.statCard,
     borderColor: colors.statCardBorder,
   },
-  statCardPrimaryGoal: { fontFamily: 'Figtree_700Bold', fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
-  statCardValueBlue: { fontFamily: 'BebasNeue_400Regular', fontSize: 28, color: '#fff', letterSpacing: 0.5 },
-  statCardUnitBlue: { fontFamily: 'Figtree_500Medium', fontSize: 13, color: 'rgba(255,255,255,0.7)' },
-  statCardLabelBlue: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  statCardGoalBlue: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
-  statCardValue: { fontFamily: 'BebasNeue_400Regular', fontSize: 26, color: colors.text, letterSpacing: 0.5 },
-  statCardUnit: { fontFamily: 'Figtree_500Medium', fontSize: 12, color: colors.textSec },
-  statCardLabel: { fontFamily: 'Figtree_500Medium', fontSize: 10, color: colors.textMuted, marginTop: 2 },
+  statCardPrimaryGoal: { fontFamily: fonts.dataSemiBold, fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
+  statCardValueBlue: { fontFamily: fonts.display, fontSize: 28, color: '#fff', letterSpacing: 0.5 },
+  statCardUnitBlue: { fontFamily: fonts.dataMedium, fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  statCardLabelBlue: { fontFamily: fonts.bodyMedium, fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  statCardGoalBlue: { fontFamily: fonts.bodyItalic, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
+  statCardValue: { fontFamily: fonts.display, fontSize: 26, color: colors.text, letterSpacing: 0.5 },
+  statCardUnit: { fontFamily: fonts.dataMedium, fontSize: 12, color: colors.textSec },
+  statCardLabel: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.textMuted, marginTop: 2 },
 
   prCard: {
     marginHorizontal: 20, marginTop: 14,
@@ -738,8 +739,8 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(56,189,248,0.16)',
     alignItems: 'center', justifyContent: 'center',
   },
-  prTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text, marginBottom: 3 },
-  prSub: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.heroTextSec },
+  prTitle: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.text, marginBottom: 3 },
+  prSub: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.heroTextSec },
 
   chartCard: {
     marginHorizontal: 20, marginTop: 14,
@@ -749,34 +750,34 @@ const s = StyleSheet.create({
   chartHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12,
   },
-  chartTitle: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.text, marginBottom: 2 },
-  chartSub: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec },
-  chartCurrent: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.textSec },
+  chartTitle: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.text, marginBottom: 2 },
+  chartSub: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSec },
+  chartCurrent: { fontFamily: fonts.dataSemiBold, fontSize: 13, color: colors.textSec },
   chart: { borderRadius: 10, marginLeft: -8 },
   emptyChart: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyChartText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  emptyChartText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   chartCardEmpty: { alignItems: 'center', paddingVertical: 28 },
   inlineLogBtn: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.accent, borderRadius: 20,
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  inlineLogBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.onAccent },
+  inlineLogBtnText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.onAccent },
   inlineEmpty: {
     paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  inlineEmptyText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textMuted, flex: 1 },
-  inlineLogLink: { fontFamily: 'Figtree_600SemiBold', fontSize: 12, color: colors.accentLight, marginLeft: 8 },
+  inlineEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, flex: 1 },
+  inlineLogLink: { fontFamily: fonts.bodySemiBold, fontSize: 12, color: colors.accentLight, marginLeft: 8 },
 
   workoutRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10,
   },
   workoutDot: { width: 8, height: 8, borderRadius: 4 },
-  workoutType: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text },
-  workoutMuscles: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textSec, marginTop: 1 },
-  workoutDate: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted },
-  emptyText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
+  workoutType: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.text },
+  workoutMuscles: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textSec, marginTop: 1 },
+  workoutDate: { fontFamily: fonts.data, fontSize: 11, color: colors.textMuted },
+  emptyText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
 
   sessionDetail: {
     backgroundColor: colors.bg,
@@ -791,13 +792,13 @@ const s = StyleSheet.create({
     gap: 8,
   },
   sessionExName: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.bodyMedium,
     fontSize: 12,
     color: colors.textSec,
     flex: 1,
   },
   sessionExSets: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataSemiBold,
     fontSize: 12,
     color: colors.text,
   },
@@ -807,8 +808,8 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: 20,
     padding: 16, borderWidth: 1, borderColor: colors.border, alignItems: 'center',
   },
-  goalTitle: { fontFamily: 'Figtree_700Bold', fontSize: 14, color: colors.text, marginBottom: 8 },
-  goalText: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 12, color: colors.textSec, textAlign: 'center', lineHeight: 20 },
+  goalTitle: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.text, marginBottom: 8 },
+  goalText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSec, textAlign: 'center', lineHeight: 20 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalCard: {
@@ -818,31 +819,31 @@ const s = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20,
   },
-  modalTitle: { fontFamily: 'BebasNeue_400Regular', fontSize: 24, color: colors.text, letterSpacing: 0.5 },
-  modalLabel: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.textSec, marginBottom: 6 },
+  modalTitle: { fontFamily: fonts.display, fontSize: 24, color: colors.text, letterSpacing: 0.5 },
+  modalLabel: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.textSec, marginBottom: 6 },
   modalInput: {
     backgroundColor: colors.surface, borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 12,
-    fontFamily: 'Figtree_400Regular', fontSize: 15, color: colors.text,
+    fontFamily: fonts.data, fontSize: 15, color: colors.text,
     marginBottom: 16, borderWidth: 1, borderColor: colors.border,
   },
   saveBtn: {
     backgroundColor: colors.accent, borderRadius: 14,
     paddingVertical: 15, alignItems: 'center', marginTop: 4,
   },
-  saveBtnText: { fontFamily: 'Figtree_700Bold', fontSize: 15, color: colors.onAccent },
+  saveBtnText: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.onAccent },
 
   histWrap: { marginTop: 18, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
-  histHeading: { fontFamily: 'Figtree_700Bold', fontSize: 13, color: colors.text, marginBottom: 4 },
-  histHint: { fontFamily: 'Figtree_400Regular_Italic', fontSize: 11, color: colors.textMuted, lineHeight: 16, marginBottom: 8 },
+  histHeading: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.text, marginBottom: 4 },
+  histHint: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, lineHeight: 16, marginBottom: 8 },
   histScroll: { maxHeight: 180 },
-  histSubhead: { fontFamily: 'Figtree_700Bold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },
+  histSubhead: { fontFamily: fonts.dataSemiBold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },
   histRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10,
   },
-  histDate: { fontFamily: 'Figtree_400Regular', fontSize: 12, color: colors.textMuted, width: 92 },
-  histVal: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text, flex: 1 },
+  histDate: { fontFamily: fonts.data, fontSize: 12, color: colors.textMuted, width: 92 },
+  histVal: { fontFamily: fonts.dataSemiBold, fontSize: 13, color: colors.text, flex: 1 },
 });
 
 const sp = StyleSheet.create({
@@ -852,23 +853,23 @@ const sp = StyleSheet.create({
   rowHeader: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
   },
-  name: { fontFamily: 'Figtree_600SemiBold', fontSize: 13, color: colors.text, marginRight: 8 },
-  meta: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  name: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.text, marginRight: 8 },
+  meta: { fontFamily: fonts.data, fontSize: 11, color: colors.textMuted, marginTop: 2 },
   deltaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  deltaText: { fontFamily: 'Figtree_700Bold', fontSize: 12 },
+  deltaText: { fontFamily: fonts.dataSemiBold, fontSize: 12 },
   history: {
     backgroundColor: colors.bg, borderRadius: 10, padding: 10,
     marginBottom: 8, gap: 10,
   },
   historyTitle: {
-    fontFamily: 'Figtree_700Bold', fontSize: 10, color: colors.textMuted,
+    fontFamily: fonts.dataSemiBold, fontSize: 10, color: colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2,
   },
   historySession: { gap: 4 },
-  historyDate: { fontFamily: 'Figtree_600SemiBold', fontSize: 11, color: colors.accentLight, marginBottom: 2 },
+  historyDate: { fontFamily: fonts.dataSemiBold, fontSize: 11, color: colors.accentLight, marginBottom: 2 },
   historySetRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  historySetNum: { fontFamily: 'Figtree_400Regular', fontSize: 11, color: colors.textMuted, width: 36 },
-  historySetVal: { fontFamily: 'Figtree_600SemiBold', fontSize: 12, color: colors.text, flex: 1 },
+  historySetNum: { fontFamily: fonts.data, fontSize: 11, color: colors.textMuted, width: 36 },
+  historySetVal: { fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.text, flex: 1 },
   feelPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  feelPillText: { fontFamily: 'Figtree_700Bold', fontSize: 10 },
+  feelPillText: { fontFamily: fonts.bodyBold, fontSize: 10 },
 });

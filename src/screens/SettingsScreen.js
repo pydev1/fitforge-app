@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 import { BUILD_NUMBER, BUILD_DATE, GIT_HASH } from '../constants/buildInfo';
 
 const BODY_TYPES = ['skinny', 'skinny_fat', 'average', 'athletic', 'overweight'];
@@ -458,7 +459,7 @@ const s = StyleSheet.create({
   keyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
     backgroundColor: colors.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 13, color: colors.text, borderWidth: 1, borderColor: colors.border, fontFamily: 'monospace',
+    fontSize: 13, color: colors.text, borderWidth: 1, borderColor: colors.border, fontFamily: fonts.data,
   },
   eyeBtn: {
     width: 44, height: 44, borderRadius: 12, backgroundColor: colors.bg,

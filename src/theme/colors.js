@@ -1,47 +1,47 @@
 export const colors = {
-  // ── MIDNIGHT BLUE — precision dark ───────────────────────────────────────
-  // Near-black background depth tiers (blue-tinted)
-  bg: '#090B14',           // page canvas (near-black navy)
-  surface: '#10152A',      // subtle surface / section fills
-  card: '#161D38',         // elevated cards
-  cardHigh: '#1E2845',     // highest surface
-  ctaCard: '#0D1120',      // CTA card — kept dark so accent pops
+  // ── IRON & PATINA — graphite + oxidised copper ───────────────────────────
+  // Background depth tiers (warm graphite, not blue-black)
+  bg: '#15171B',           // page canvas
+  surface: '#1E2126',      // subtle surface / section fills
+  card: '#262A30',         // elevated cards
+  cardHigh: '#2E333A',     // highest surface
+  ctaCard: '#1B1E23',      // CTA card — kept dark so accent pops
 
-  // Hero card — deep blue feature panel
-  heroCard: '#0D1528',
-  heroCardBorder: '#1B3060',
-  heroCardDeep: '#080C1A',
-  heroCardDeepAlt: '#080C1A',
+  // Hero card — elevated graphite feature panel
+  heroCard: '#1E2126',
+  heroCardBorder: 'rgba(217,143,92,0.18)',
+  heroCardDeep: '#15171B',
+  heroCardDeepAlt: '#15171B',
 
-  // Text on the hero card (blue-white family)
-  heroText: '#EAF2FF',
-  heroTextSec: '#7FBFFF',
-  heroTextMuted: '#4A6A9A',
+  // Text on the hero card
+  heroText: '#ECE9E2',
+  heroTextSec: '#C8C5BD',
+  heroTextMuted: '#9B9E9F',
 
-  // Text on dark surfaces
-  text: '#E8F0FF',         // cool white
-  textSec: '#9DAFC8',
-  textMuted: '#6A7D9E',
+  // Text on dark surfaces (warm chalk-white family)
+  text: '#ECE9E2',
+  textSec: '#9B9E9F',
+  textMuted: '#6B6E71',
 
-  // Stat highlight tile (electric blue)
-  statCard: '#1D4ED8',
-  statCardBorder: '#1E40AF',
+  // Stat highlight tile
+  statCard: '#2E8E7D',
+  statCardBorder: '#256F62',
 
-  // Action colour — SKY BLUE. Buttons / active / pips / rings ONLY, never bg.
-  accent: '#38BDF8',
-  accentLight: '#7DD3FC',
-  onAccent: '#050810',     // text + icons that sit ON the sky-blue accent
+  // Action colour — COPPER. Buttons / active / pips / rings ONLY, never bg.
+  accent: '#D98F5C',
+  accentLight: '#E3A876',
+  onAccent: '#1A1410',     // text + icons that sit ON the copper accent
 
   // Supporting
-  border: '#1E2A45',
-  borderSubtle: '#141C30',
-  success: '#34D399',
-  warning: '#FBBF24',
-  info: '#60A5FA',         // lighter blue (second accent)
+  border: 'rgba(236,233,226,0.10)',
+  borderSubtle: 'rgba(236,233,226,0.06)',
+  success: '#4FB8A6',      // patina — positive / "easy" signal
+  warning: '#D9A441',
+  info: '#4FB8A6',
   white: '#FFFFFF',
 
   // Keep legacy aliases so untouched screens don't break
-  accentDim: '#0D1D2E',    // dark blue-tinted chip fill
-  secondary: '#FB7185',    // coral-red — negative / "tough" signal
-  secondaryDim: '#4C1D24',
+  accentDim: 'rgba(217,143,92,0.12)',
+  secondary: '#B24A3D',    // rust — negative / "tough" signal
+  secondaryDim: 'rgba(178,74,61,0.18)',
 };

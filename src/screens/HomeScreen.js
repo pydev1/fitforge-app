@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { MOTIVATIONAL_QUOTES } from '../data/workoutData';
 import { colors } from '../theme/colors';
+import { fonts } from '../theme/fonts';
 import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
 import {
   RESTART_GAP_DAYS, getProgramWeek, getProgressionModifier,
@@ -653,19 +654,19 @@ const s = StyleSheet.create({
     paddingBottom: 14,
   },
   greeting: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textSec,
   },
   name: {
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: fonts.display,
     fontSize: 36,
     color: colors.text,
     letterSpacing: 1,
     marginTop: 1,
   },
   contextLine: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textSec,
     marginTop: 2,
@@ -696,12 +697,12 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   restartTitle: {
-    fontFamily: 'Figtree_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     color: colors.accentLight,
   },
   restartSub: {
-    fontFamily: 'Figtree_400Regular',
+    fontFamily: fonts.body,
     fontSize: 12,
     color: colors.textSec,
     lineHeight: 17,
@@ -722,7 +723,7 @@ const s = StyleSheet.create({
     borderColor: colors.accent + '40',
   },
   rampChipText: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.bodySemiBold,
     fontSize: 11,
     color: colors.accentLight,
   },
@@ -740,13 +741,13 @@ const s = StyleSheet.create({
     borderColor: colors.warning + '55',
   },
   completeTitle: {
-    fontFamily: 'Figtree_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     color: colors.text,
     marginBottom: 2,
   },
   completeSub: {
-    fontFamily: 'Figtree_400Regular',
+    fontFamily: fonts.body,
     fontSize: 11,
     color: colors.textSec,
     lineHeight: 16,
@@ -758,9 +759,9 @@ const s = StyleSheet.create({
     paddingVertical: 7,
   },
   completeBtnText: {
-    fontFamily: 'Figtree_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
-    color: '#1A1100',
+    color: colors.onAccent,
   },
 
   heroCard: {
@@ -779,7 +780,7 @@ const s = StyleSheet.create({
   },
   // Fix 7: removed textTransform: 'uppercase'
   heroLabel: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataMedium,
     fontSize: 12,
     color: colors.heroTextMuted,
     letterSpacing: 0.6,
@@ -787,19 +788,19 @@ const s = StyleSheet.create({
   },
   heroValueRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   heroNumber: {
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: fonts.display,
     fontSize: 56,
     color: colors.heroText,
     lineHeight: 58,
   },
   heroUnit: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.dataMedium,
     fontSize: 18,
     color: colors.heroTextSec,
     marginBottom: 8,
   },
   heroGoal: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 12,
     color: colors.heroTextMuted,
     marginTop: 2,
@@ -807,13 +808,13 @@ const s = StyleSheet.create({
 
   weekBlock: { alignItems: 'flex-end' },
   weekLabel: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataMedium,
     fontSize: 11,
     color: colors.heroTextMuted,
     marginBottom: 3,
   },
   weekCount: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 12,
     color: colors.heroTextSec,
     marginBottom: 8,
@@ -835,7 +836,7 @@ const s = StyleSheet.create({
   },
   weekSquareFuture: { opacity: 0.4 },
   weekSquareLabel: {
-    fontFamily: 'Figtree_700Bold',
+    fontFamily: fonts.dataSemiBold,
     fontSize: 8,
     color: colors.heroTextMuted,
   },
@@ -849,13 +850,13 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
   journeyLabel: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.dataMedium,
     fontSize: 10,
     color: colors.heroTextMuted,
   },
   journeyTrack: {
     height: 5,
-    backgroundColor: '#0B141B',
+    backgroundColor: colors.heroCardDeep,
     borderRadius: 3,
     overflow: 'visible',
     position: 'relative',
@@ -909,7 +910,7 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   ctaEyebrow: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.dataMedium,
     fontSize: 12,
     color: colors.textMuted,
     marginBottom: 8,
@@ -925,25 +926,25 @@ const s = StyleSheet.create({
     marginTop: 8,
   },
   ctaRestInfoLabel: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataMedium,
     fontSize: 11,
     color: colors.textMuted,
   },
   ctaRestInfoText: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.bodyMedium,
     fontSize: 12,
     color: colors.textSec,
     flex: 1,
   },
   ctaTitle: {
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: fonts.display,
     fontSize: 30,
     color: colors.text,
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   ctaSub: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textSec,
     marginBottom: 10,
@@ -955,12 +956,12 @@ const s = StyleSheet.create({
     marginBottom: 14,
   },
   ctaMetaTxt: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.dataMedium,
     fontSize: 12,
     color: colors.textMuted,
   },
   ctaMetaDot: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.dataMedium,
     fontSize: 12,
     color: colors.textMuted,
   },
@@ -984,7 +985,7 @@ const s = StyleSheet.create({
     marginTop: 10,
   },
   beginBtnText: {
-    fontFamily: 'Figtree_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     color: '#fff',
   },
@@ -994,13 +995,13 @@ const s = StyleSheet.create({
     paddingVertical: 6,
   },
   ctaDoneTitle: {
-    fontFamily: 'Figtree_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     color: colors.success,
     marginBottom: 4,
   },
   ctaDoneNext: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 12,
     color: colors.textSec,
   },
@@ -1017,7 +1018,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   planChipText: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 12,
     color: colors.textMuted,
   },
@@ -1033,14 +1034,14 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   quoteText: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 14,
     color: colors.textSec,
     textAlign: 'center',
     lineHeight: 22,
   },
   quoteAuthor: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.bodyMedium,
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 8,
@@ -1050,24 +1051,24 @@ const s = StyleSheet.create({
 const hs = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center' },
   value: {
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: fonts.dataSemiBold,
     fontSize: 22,
     color: colors.heroText,
     letterSpacing: 0.5,
   },
   unit: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.dataMedium,
     fontSize: 13,
     color: colors.heroTextSec,
   },
   sub: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.data,
     fontSize: 9,
     color: colors.heroTextMuted,
     marginTop: 1,
   },
   label: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.bodyMedium,
     fontSize: 10,
     color: colors.heroTextMuted,
     marginTop: 2,
@@ -1090,20 +1091,20 @@ const pc = StyleSheet.create({
     marginBottom: 10,
   },
   eyebrow: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataMedium,
     fontSize: 10,
     color: colors.accent,
     letterSpacing: 1.2,
     marginBottom: 2,
   },
   title: {
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: fonts.display,
     fontSize: 20,
     color: colors.heroText,
     letterSpacing: 0.5,
   },
   focus: {
-    fontFamily: 'Figtree_400Regular',
+    fontFamily: fonts.body,
     fontSize: 11,
     color: colors.textMuted,
     marginTop: 1,
@@ -1124,20 +1125,20 @@ const pc = StyleSheet.create({
   },
   deloadText: {
     flex: 1,
-    fontFamily: 'Figtree_400Regular',
+    fontFamily: fonts.body,
     fontSize: 11,
     color: colors.textSec,
     lineHeight: 15,
   },
   deloadTextStrong: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.bodySemiBold,
     color: colors.success,
   },
   aiNote: {
     marginBottom: 10,
   },
   aiNoteText: {
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 10,
     color: colors.accentLight,
   },
@@ -1148,18 +1149,18 @@ const pc = StyleSheet.create({
   },
   exName: {
     flex: 1,
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.bodyMedium,
     fontSize: 13,
     color: colors.text,
   },
   meta: {
-    fontFamily: 'Figtree_400Regular',
+    fontFamily: fonts.data,
     fontSize: 12,
     color: colors.textMuted,
     marginRight: 10,
   },
   weight: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataSemiBold,
     fontSize: 13,
     color: colors.accentLight,
     minWidth: 60,
@@ -1167,7 +1168,7 @@ const pc = StyleSheet.create({
   },
   weightNew: {
     color: colors.textMuted,
-    fontFamily: 'Figtree_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
   },
   setOut: {
     flexDirection: 'row',
@@ -1178,13 +1179,13 @@ const pc = StyleSheet.create({
     borderTopColor: colors.border,
   },
   setOutLabel: {
-    fontFamily: 'Figtree_500Medium',
+    fontFamily: fonts.dataMedium,
     fontSize: 11,
     color: colors.textMuted,
     marginLeft: 5,
   },
   setOutWeights: {
-    fontFamily: 'Figtree_600SemiBold',
+    fontFamily: fonts.dataSemiBold,
     fontSize: 11,
     color: colors.accent,
   },
