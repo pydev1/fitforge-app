@@ -524,20 +524,27 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
   // preview doesn't quietly diverge from what actually shows up on the day —
   // the whole point of "prep the night before" breaks if the two disagree.
   const [aiSuggestions, setAiSuggestions] = React.useState({});
+  const [aiError, setAiError] = React.useState(null);
   React.useEffect(() => {
     if (!progressedExercises.length || !state.apiKey || mod.isDeload || rampActive) {
       setAiSuggestions({});
+      setAiError(null);
       return;
     }
     let cancelled = false;
+    setAiError(null);
     getWorkoutSuggestions(progressedExercises, setLogs, state.userProfile, state.apiKey)
       .then(res => {
-        if (cancelled || !res?.suggestions) return;
-        const map = {};
-        res.suggestions.forEach(sug => { if (sug.weight != null) map[sug.id] = sug; });
-        setAiSuggestions(map);
+        if (cancelled) return;
+        if (res?.suggestions) {
+          const map = {};
+          res.suggestions.forEach(sug => { if (sug.weight != null) map[sug.id] = sug; });
+          setAiSuggestions(map);
+        } else if (res?.error) {
+          setAiError(res.message || 'AI request failed');
+        }
       })
-      .catch(() => {});
+      .catch(e => { if (!cancelled) setAiError(e?.message || 'AI request failed'); });
     return () => { cancelled = true; };
   }, [workout?.id, state.apiKey, mod.isDeload, rampActive]);
 
@@ -603,6 +610,14 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
       {!mod.isDeload && usesAi && (
         <View style={pc.aiNote}>
           <Text style={pc.aiNoteText}>✦ AI-adjusted — matches what tomorrow's workout screen will show</Text>
+        </View>
+      )}
+
+      {!mod.isDeload && !usesAi && aiError && (
+        <View style={pc.aiNote}>
+          <Text style={[pc.aiNoteText, { color: colors.secondary }]}>
+            ⚠ AI coach unavailable — showing calculated weights instead. ({aiError})
+          </Text>
         </View>
       )}
 

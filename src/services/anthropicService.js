@@ -69,15 +69,23 @@ Rules:
         messages: [{ role: 'user', content: prompt }],
       }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // Standalone builds have no console attached, so a swallowed failure
+      // here is invisible to the user forever — every AI call just silently
+      // falls back to the rule engine with no way to tell why. Surface a
+      // reason instead of null so the UI can show it.
+      let detail = '';
+      try { detail = (await response.json())?.error?.message || ''; } catch {}
+      return { error: true, message: `AI request failed (${response.status})${detail ? ': ' + detail : ''}` };
+    }
     const data = await response.json();
     const text = data.content?.[0]?.text?.trim() || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
+    if (!match) return { error: true, message: 'AI response was not valid JSON' };
     const parsed = JSON.parse(match[0]);
-    return parsed?.suggestions?.length ? parsed : null;
-  } catch {
-    return null;
+    return parsed?.suggestions?.length ? parsed : { error: true, message: 'AI returned no suggestions' };
+  } catch (e) {
+    return { error: true, message: e?.message || 'Network error reaching AI' };
   }
 }
 

@@ -182,6 +182,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const [completedExercises, setCompletedExercises] = React.useState(new Set());
   const [aiSuggestions, setAiSuggestions] = React.useState({});
   const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiError, setAiError] = React.useState(null);
   const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
@@ -210,10 +211,12 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
     if (!workout?.exercises?.length || !state.apiKey || mod.isDeload || rampActive) {
       setAiSuggestions({});
       setAiLoading(false);
+      setAiError(null);
       return;
     }
     let cancelled = false;
     setAiLoading(true);
+    setAiError(null);
     // Progressed + swapped exercises, not the raw plan — otherwise the AI is
     // told this week's base rep target (e.g. "12-15") instead of the actual
     // phase-adjusted one shown on screen (e.g. "11-14"), and is blind to any
@@ -221,14 +224,18 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
     const aiExercises = workout.exercises.map(orig => applyProgression(resolveExercise(orig, swaps, primaryGoal), mod));
     getWorkoutSuggestions(aiExercises, state.progress.setLogs || [], state.userProfile, state.apiKey)
       .then(res => {
-        if (cancelled || !res?.suggestions) return;
-        const map = {};
-        res.suggestions.forEach(sug => {
-          if (sug.weight != null) map[sug.id] = { weight: sug.weight, reason: sug.reason };
-        });
-        setAiSuggestions(map);
+        if (cancelled) return;
+        if (res?.suggestions) {
+          const map = {};
+          res.suggestions.forEach(sug => {
+            if (sug.weight != null) map[sug.id] = { weight: sug.weight, reason: sug.reason };
+          });
+          setAiSuggestions(map);
+        } else if (res?.error) {
+          setAiError(res.message || 'AI request failed');
+        }
       })
-      .catch(() => {})
+      .catch(e => { if (!cancelled) setAiError(e?.message || 'AI request failed'); })
       .finally(() => { if (!cancelled) setAiLoading(false); });
     return () => { cancelled = true; };
     // Re-run only when the workout, key, deload, or ramp state changes — not on every set log.
@@ -387,6 +394,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             onSetSaved={onSetSaved}
             aiSuggestion={aiSuggestions[progressedEx.id]}
             aiLoading={aiLoading && !!state.apiKey}
+            aiError={aiError}
             restart={restart}
             isBand={isBandExercise(ex.equipment)}
             swapToId={swapToId}
@@ -483,7 +491,7 @@ function SectionLabel({ text, icon, color }) {
 
 /* ─── Exercise Card ─────────────────────────────────────────────── */
 
-function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved, aiSuggestion, aiLoading, restart, isBand, swapToId, swapToName, isSwapped, swapBackName, onSwap }) {
+function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isToday, setData, onSetDataChange, isDeload, isCompleted, onToggleComplete, onSetSaved, aiSuggestion, aiLoading, aiError, restart, isBand, swapToId, swapToName, isSwapped, swapBackName, onSwap }) {
   return (
     <TouchableOpacity style={[s.exCard, isCompleted && { opacity: 0.55 }]} onPress={onToggle} activeOpacity={0.8}>
       <View style={s.exCardTop}>
@@ -552,7 +560,7 @@ function ExerciseCard({ exercise, expanded, onToggle, accentColor, onInfo, isTod
             </TouchableOpacity>
           )}
 
-          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} aiSuggestion={aiSuggestion} aiLoading={aiLoading} restart={restart} isBand={isBand} />}
+          {isToday && <SetLogger exercise={exercise} accentColor={accentColor} sets={setData} onSetsChange={onSetDataChange} isDeload={isDeload} onSetSaved={onSetSaved} aiSuggestion={aiSuggestion} aiLoading={aiLoading} aiError={aiError} restart={restart} isBand={isBand} />}
         </View>
       )}
     </TouchableOpacity>
@@ -955,7 +963,7 @@ function getBandRepSuggestion(setLogs, exercise, setIdx, today) {
   return sameSet?.reps ? sameSet.reps + 2 : null;
 }
 
-function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved, aiSuggestion, aiLoading, restart, isBand }) {
+function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetSaved, aiSuggestion, aiLoading, aiError, restart, isBand }) {
   const { state, dispatch } = useApp();
   const setLogs = state.progress.setLogs || [];
   const today = toLocalDateKey();
@@ -1094,6 +1102,14 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
           <Text style={sl.aiBannerText}>
             <Text style={sl.aiBannerStrong}>AI suggests {aiWeightDisplay}kg</Text>
             {aiSuggestion.reason ? ` · ${aiSuggestion.reason}` : ''}
+          </Text>
+        </View>
+      ) : aiError ? (
+        <View style={[sl.aiBanner, { borderColor: colors.secondary + '55' }]}>
+          <Ionicons name="alert-circle-outline" size={13} color={colors.secondary} />
+          <Text style={sl.aiBannerText}>
+            <Text style={[sl.aiBannerStrong, { color: colors.secondary }]}>AI coach unavailable.</Text>
+            {' '}Using the calculated weight instead. ({aiError})
           </Text>
         </View>
       ) : null}
