@@ -38,7 +38,9 @@ Athlete: ${userProfile.fitnessLevel || 'beginner'} level, goals: ${(userProfile.
 
 ${historyBlock}
 
-Reply with ONLY valid JSON, no other text:
+Output ONLY the JSON object below — no reasoning, no explanation, no markdown
+fences, no text before or after it. Your entire reply must start with "{" and
+end with "}":
 {"suggestions":[{"id":"<exercise_id>","weight":<number or null>,"reason":"<8 words max>"}]}
 
 Rules:
@@ -65,7 +67,7 @@ Rules:
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 400,
+        max_tokens: 800,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -79,9 +81,17 @@ Rules:
       return { error: true, message: `AI request failed (${response.status})${detail ? ': ' + detail : ''}` };
     }
     const data = await response.json();
-    const text = data.content?.[0]?.text?.trim() || '';
+    // Find the first text block rather than assuming index 0 — a "thinking"
+    // block (or any non-text block) ahead of it would otherwise silently
+    // yield an empty string here.
+    const textBlock = (data.content || []).find(b => b.type === 'text');
+    const text = (textBlock?.text || '').trim();
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return { error: true, message: 'AI response was not valid JSON' };
+    if (!match) {
+      const truncated = data.stop_reason === 'max_tokens' ? ' (response was cut off)' : '';
+      const preview = text ? `: "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"` : ' (empty response)';
+      return { error: true, message: `AI response had no JSON${truncated}${preview}` };
+    }
     const parsed = JSON.parse(match[0]);
     return parsed?.suggestions?.length ? parsed : { error: true, message: 'AI returned no suggestions' };
   } catch (e) {
