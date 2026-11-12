@@ -1,5 +1,8 @@
-import { daysBetweenLocalDateKeys, fromLocalDateKey } from './date';
+import { daysBetweenLocalDateKeys, toLocalDateKey } from './date';
 import { getDumbbellLadder, snapToLoad, nextLoadUp, nextLoadDown } from './equipment';
+import {
+  pausedDaysBetween, getActiveDeload, getActiveTrip, getLastFinishedTrip, addDays,
+} from './recovery';
 
 // 12-week periodised programme — 3 phases of 4 weeks, last week of each is a deload.
 // deltaSets / deltaReps are applied on top of the base sets/reps from the exercise library.
@@ -59,16 +62,18 @@ export const BAND_SWAPS = {
 // Programme week ───────────────────────────────────────────────────────────────
 // Returns 1–12 during the programme, 13 when it's complete (>12 weeks elapsed).
 // Anchors to restart.date so a cycle reset or detraining restart resets the count.
-export function getProgramWeek(completedWorkouts, anchorDateKey) {
-  let startMs;
+// Days spent on a trip (travel mode) don't count — the programme is paused.
+export function getProgramWeek(completedWorkouts, anchorDateKey, trips) {
+  let startKey;
   if (anchorDateKey) {
-    startMs = fromLocalDateKey(anchorDateKey).getTime();
+    startKey = anchorDateKey;
   } else {
     if (!completedWorkouts || !completedWorkouts.length) return 1;
-    const sorted = [...completedWorkouts].sort((a, b) => a.date.localeCompare(b.date));
-    startMs = new Date(sorted[0].date).getTime();
+    startKey = [...completedWorkouts].map(w => w.date).sort()[0];
   }
-  const daysDiff = Math.max(0, Math.floor((Date.now() - startMs) / 86400000));
+  const todayKey = toLocalDateKey();
+  const elapsed = Math.max(0, daysBetweenLocalDateKeys(startKey, todayKey));
+  const daysDiff = Math.max(0, elapsed - pausedDaysBetween(trips, startKey, todayKey));
   const weekNum  = Math.floor(daysDiff / 7) + 1;
   return Math.min(weekNum, 13); // 13 signals programme complete
 }
@@ -87,6 +92,66 @@ export function getProgressionModifier(programWeek) {
   if (programWeek >= 13) return PROGRAMME_COMPLETE;
   const idx = Math.min(programWeek, 12) - 1;
   return SCHEME[Math.max(0, idx)];
+}
+
+// Adaptive mode replaces the fixed week-4/8/12 deloads with a "hold" week —
+// recovery weeks happen when your logged sets say you need one instead.
+const ADAPTIVE_HOLD = {
+  label: 'Consolidate', phase: 'Own these weights — recovery adapts to how you feel',
+  deltaSets: 0, deltaReps: 0, isDeload: false,
+};
+const ADAPTIVE_FINAL = {
+  label: 'Complete', phase: 'Final week — own your numbers',
+  deltaSets: 0, deltaReps: 0, isDeload: false,
+};
+const DELOAD_WEEK = {
+  label: 'Deload', phase: 'Recovery week — lighter loads, same movements',
+  deltaSets: -1, deltaReps: -2, isDeload: true,
+};
+const TRAVEL_WEEK = {
+  label: 'Travel', phase: 'Programme paused — just keep moving',
+  deltaSets: 0, deltaReps: 0, isDeload: false, isTravel: true,
+};
+
+// The single source of truth for "what does this week look like?".
+// Order of precedence: active trip → active deload → programme week.
+export function getEffectiveModifier(programWeek, { deloadMode = 'adaptive', deloads, trips, today } = {}) {
+  const day = today || toLocalDateKey();
+  if (getActiveTrip(trips, day)) return { ...TRAVEL_WEEK, week: programWeek };
+  if (getActiveDeload(deloads, day)) return { ...DELOAD_WEEK, week: programWeek };
+  const base = getProgressionModifier(programWeek);
+  if (deloadMode === 'scheduled' || !base.isDeload) return base;
+  return { ...(base.week === 12 ? ADAPTIVE_FINAL : ADAPTIVE_HOLD), week: base.week };
+}
+
+// Convenience for screens: everything they need from app state in one call.
+export function getWeekContext(state, today = toLocalDateKey()) {
+  const trips = state.trips || [];
+  const programWeek = getProgramWeek(state.progress?.completedWorkouts, state.restart?.date, trips);
+  const mod = getEffectiveModifier(programWeek, {
+    deloadMode: state.deloadMode || 'adaptive',
+    deloads: state.deloads || [],
+    trips,
+    today,
+  });
+  return { programWeek, mod, loadEase: getLoadEase(state, today) };
+}
+
+// Which "ease the loads back down" rule applies right now. A programme restart
+// is used as-is. Coming home from a trip without your usual kit produces an
+// equivalent, milder ease — but unlike a restart it does NOT reset the
+// programme week. Whichever happened most recently wins.
+export function getLoadEase(state, today = toLocalDateKey()) {
+  const restart = state.restart || null;
+  const trip = getLastFinishedTrip(state.trips, today);
+  if (!trip || trip.kit === 'gym') return restart;
+  const returnDate = addDays(trip.end, 1);
+  if (restart && restart.date >= returnDate) return restart;
+  const tripDays = daysBetweenLocalDateKeys(trip.start, returnDate);
+  const weeksOff = Math.max(1, Math.floor(tripDays / 7));
+  // Bodyweight training while away holds onto most of it, so cap the ease at 15%.
+  const factor = Math.max(0.85, detrainingFactor(weeksOff, 'auto'));
+  return { date: returnDate, weeksOff, factor, mode: 'travel' };
 }
 
 export function applyProgression(exercise, mod) {

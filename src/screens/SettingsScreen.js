@@ -9,6 +9,10 @@ import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
 import { fonts } from '../theme/fonts';
 import { BUILD_NUMBER, BUILD_DATE, GIT_HASH } from '../constants/buildInfo';
+import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
+import {
+  TRIP_KITS, addDays, getActiveTrip, getCurrentOrUpcomingTrip, getActiveDeload, deloadEndDate,
+} from '../utils/recovery';
 
 const BODY_TYPES = ['skinny', 'skinny_fat', 'average', 'athletic', 'overweight'];
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -330,6 +334,12 @@ export default function SettingsScreen({ navigation }) {
           </Text>
         </Section>
 
+        {/* Recovery weeks */}
+        <RecoverySection state={state} dispatch={dispatch} />
+
+        {/* Travel mode */}
+        <TravelSection state={state} dispatch={dispatch} />
+
         {/* Reminders */}
         <Section title="Daily Reminder" icon="notifications-outline">
           <View style={s.reminderRow}>
@@ -381,6 +391,233 @@ export default function SettingsScreen({ navigation }) {
 }
 
 /* ─── Sub-components ────────────────────────────────────────────── */
+
+function prettyDate(dateKey) {
+  return fromLocalDateKey(dateKey).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const DELOAD_MODES = [
+  { id: 'adaptive',  label: 'When I need it', blurb: 'Recommended — a lighter week is offered when your logged sets keep coming back hard, or after ~10 weeks straight.' },
+  { id: 'scheduled', label: 'Every 4th week', blurb: 'Classic fixed plan — weeks 4, 8 and 12 are always lighter.' },
+];
+
+function RecoverySection({ state, dispatch }) {
+  const today = toLocalDateKey();
+  const mode = state.deloadMode || 'adaptive';
+  const active = getActiveDeload(state.deloads, today);
+  return (
+    <Section title="Recovery Weeks" icon="leaf-outline">
+      {DELOAD_MODES.map(m => {
+        const selected = mode === m.id;
+        return (
+          <TouchableOpacity
+            key={m.id}
+            style={[s.optionRow, selected && s.optionRowActive]}
+            onPress={() => dispatch({ type: 'SET_DELOAD_MODE', payload: m.id })}
+            activeOpacity={0.85}
+          >
+            <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? colors.accent : colors.textMuted} />
+            <View style={{ flex: 1 }}>
+              <Text style={[s.optionLabel, selected && { color: colors.text }]}>{m.label}</Text>
+              <Text style={s.optionBlurb}>{m.blurb}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+      {active ? (
+        <>
+          <View style={[s.restartStatus, { marginTop: 8 }]}>
+            <Ionicons name="leaf" size={15} color={colors.success} />
+            <Text style={s.restartStatusText}>
+              Recovery week on until {prettyDate(addDays(deloadEndDate(active), -1))}.
+            </Text>
+          </View>
+          <TouchableOpacity style={s.restartClearBtn} onPress={() => dispatch({ type: 'END_DELOAD', payload: today })}>
+            <Text style={s.restartClearText}>End recovery week early</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <TouchableOpacity
+          style={[s.secondaryBtn, { marginTop: 8 }]}
+          onPress={() => Alert.alert(
+            'Start a recovery week?',
+            'For the next 7 days your workouts stay the same but go ~40% lighter with one set fewer.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Start', onPress: () => dispatch({ type: 'START_DELOAD', payload: { start: today, reason: 'manual' } }) },
+            ],
+          )}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="leaf-outline" size={16} color={colors.success} style={{ marginRight: 8 }} />
+          <Text style={s.secondaryBtnText}>Feeling run down? Start one now</Text>
+        </TouchableOpacity>
+      )}
+    </Section>
+  );
+}
+
+function DateStepper({ label, value, onChange, min }) {
+  function shift(n) {
+    const next = addDays(value, n);
+    onChange(min && next < min ? min : next);
+  }
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <Label text={label} />
+      <View style={s.stepperRow}>
+        <TouchableOpacity style={s.stepBtn} onPress={() => shift(-7)}><Text style={s.stepBtnText}>−7</Text></TouchableOpacity>
+        <TouchableOpacity style={s.stepBtn} onPress={() => shift(-1)}><Text style={s.stepBtnText}>−1</Text></TouchableOpacity>
+        <Text style={s.stepValue}>{prettyDate(value)}</Text>
+        <TouchableOpacity style={s.stepBtn} onPress={() => shift(1)}><Text style={s.stepBtnText}>+1</Text></TouchableOpacity>
+        <TouchableOpacity style={s.stepBtn} onPress={() => shift(7)}><Text style={s.stepBtnText}>+7</Text></TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function TravelSection({ state, dispatch }) {
+  const today = toLocalDateKey();
+  const current = getCurrentOrUpcomingTrip(state.trips, today);
+  const inProgress = !!getActiveTrip(state.trips, today);
+
+  const [editing, setEditing] = useState(false);
+  const [start, setStart] = useState(current?.start || addDays(today, 1));
+  // "Back on" = first day home; the trip's last day away is the day before.
+  const [back, setBack] = useState(current ? addDays(current.end, 1) : addDays(today, 15));
+  const [kit, setKit] = useState(current?.kit || 'bodyweight');
+  const [daysPerWeek, setDaysPerWeek] = useState(current?.daysPerWeek || 3);
+
+  function openEditor() {
+    setStart(current?.start || addDays(today, 1));
+    setBack(current ? addDays(current.end, 1) : addDays(today, 15));
+    setKit(current?.kit || 'bodyweight');
+    setDaysPerWeek(current?.daysPerWeek || 3);
+    setEditing(true);
+  }
+
+  function saveTrip() {
+    const effectiveStart = inProgress ? current.start : start;
+    if (back <= effectiveStart) {
+      Alert.alert('Check your dates', 'Your return date needs to be after the day you leave.');
+      return;
+    }
+    if (!inProgress && effectiveStart < today) {
+      Alert.alert('Check your dates', 'The trip can\'t start in the past.');
+      return;
+    }
+    dispatch({
+      type: 'SET_TRIP',
+      payload: { today, trip: { start: effectiveStart, end: addDays(back, -1), kit, daysPerWeek } },
+    });
+    setEditing(false);
+  }
+
+  function cancelTrip() {
+    Alert.alert(
+      inProgress ? 'Back home already?' : 'Cancel this trip?',
+      inProgress
+        ? 'Travel mode ends today and your normal plan picks up again. The days you were away stay paused.'
+        : 'Travel mode won\'t switch on for these dates.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        { text: inProgress ? 'I\'m back' : 'Cancel trip', style: 'destructive', onPress: () => dispatch({ type: 'CANCEL_TRIP', payload: today }) },
+      ],
+    );
+  }
+
+  const awayDays = editing ? daysBetweenLocalDateKeys(inProgress ? current.start : start, back) : 0;
+
+  return (
+    <Section title="Travel Mode" icon="airplane-outline">
+      {!editing && current && (
+        <>
+          <View style={s.restartStatus}>
+            <Ionicons name="airplane" size={15} color={colors.warning} />
+            <Text style={s.restartStatusText}>
+              {inProgress ? 'Away now' : 'Trip planned'} · {prettyDate(current.start)} → back {prettyDate(addDays(current.end, 1))}
+              {'\n'}{TRIP_KITS.find(k => k.id === current.kit)?.label || 'Bodyweight only'}
+              {current.kit !== 'gym' ? ` · ${current.daysPerWeek || 3} sessions a week` : ''}
+            </Text>
+          </View>
+          <TouchableOpacity style={s.restartBtn} onPress={openEditor} activeOpacity={0.85}>
+            <Ionicons name="create-outline" size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+            <Text style={s.restartBtnText}>Edit Trip</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.restartClearBtn} onPress={cancelTrip}>
+            <Text style={s.restartClearText}>{inProgress ? 'I\'m back early — end travel mode' : 'Cancel trip'}</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {!editing && !current && (
+        <TouchableOpacity style={s.restartBtn} onPress={openEditor} activeOpacity={0.85}>
+          <Ionicons name="airplane" size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+          <Text style={s.restartBtnText}>Plan A Trip</Text>
+        </TouchableOpacity>
+      )}
+
+      {editing && (
+        <>
+          {inProgress
+            ? <Text style={s.note}>Left on {prettyDate(current.start)}</Text>
+            : <DateStepper label="Leaving on" value={start} onChange={v => { setStart(v); if (back <= v) setBack(addDays(v, 1)); }} min={today} />}
+          <DateStepper label="Back home on" value={back} onChange={setBack} min={addDays(inProgress ? current.start : start, 1)} />
+          <Text style={s.scheduleHint}>{awayDays} day{awayDays === 1 ? '' : 's'} away</Text>
+
+          <Label text="What will you have?" style={{ marginTop: 12 }} />
+          {TRIP_KITS.map(k => {
+            const selected = kit === k.id;
+            return (
+              <TouchableOpacity
+                key={k.id}
+                style={[s.optionRow, selected && s.optionRowActive]}
+                onPress={() => setKit(k.id)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? colors.accent : colors.textMuted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.optionLabel, selected && { color: colors.text }]}>{k.label}</Text>
+                  <Text style={s.optionBlurb}>{k.blurb}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {kit !== 'gym' && (
+            <>
+              <Label text="Sessions per week while away" style={{ marginTop: 8 }} />
+              <View style={s.chipRow}>
+                {[2, 3].map(n => (
+                  <TouchableOpacity
+                    key={n}
+                    style={[s.numChip, daysPerWeek === n && s.numChipActive]}
+                    onPress={() => setDaysPerWeek(n)}
+                  >
+                    <Text style={[s.numChipText, daysPerWeek === n && s.numChipTextActive]}>{n}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          <TouchableOpacity style={[s.restartBtn, { marginTop: 12 }]} onPress={saveTrip} activeOpacity={0.85}>
+            <Ionicons name="checkmark" size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+            <Text style={s.restartBtnText}>{current ? 'Save Trip' : 'Turn On Travel Mode'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.restartClearBtn} onPress={() => setEditing(false)}>
+            <Text style={s.restartClearText}>Cancel</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      <Text style={s.regenNote}>
+        While you're away the 12-week programme pauses, workouts switch to a short 20–30 min full-body routine, and
+        the trip doesn't count as time off. When you're back, your first sessions start a little lighter.
+      </Text>
+    </Section>
+  );
+}
 
 function Section({ title, icon, children }) {
   return (
@@ -514,6 +751,26 @@ const s = StyleSheet.create({
   reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   reminderLabel: { fontSize: 14, color: colors.text, fontWeight: '600' },
   reminderSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  optionRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    borderRadius: 12, padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+  },
+  optionRowActive: { borderColor: colors.accent, backgroundColor: colors.accentDim },
+  optionLabel: { fontSize: 14, color: colors.textSec, fontWeight: '700' },
+  optionBlurb: { fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 2 },
+  secondaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.success + '66',
+  },
+  secondaryBtnText: { fontSize: 13, color: colors.success, fontWeight: '700' },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepBtn: {
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+  },
+  stepBtnText: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
+  stepValue: { flex: 1, textAlign: 'center', fontSize: 13, color: colors.text, fontWeight: '700' },
   scheduleHint: { fontSize: 11, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
 });
 

@@ -9,11 +9,15 @@ import { colors } from '../theme/colors';
 import { fonts } from '../theme/fonts';
 import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
 import {
-  RESTART_GAP_DAYS, getProgramWeek, getProgressionModifier,
+  RESTART_GAP_DAYS, getWeekContext,
   applyProgression, isBandExercise, getNextSessionWeight,
 } from '../utils/progression';
 import { isTwoDumbbell, getDumbbellLadder, snapToLoad } from '../utils/equipment';
-import { makeWorkoutExercise } from '../utils/workoutGenerator';
+import { makeWorkoutExercise, getPlanForDate } from '../utils/workoutGenerator';
+import {
+  getActiveTrip, getCurrentOrUpcomingTrip, getActiveDeload, deloadEndDate,
+  getDeloadSuggestion, describeDeloadSuggestion, pausedDaysBetween, addDays,
+} from '../utils/recovery';
 import { getWorkoutSuggestions } from '../services/anthropicService';
 
 function getLastActivityDate(progress) {
@@ -47,20 +51,28 @@ function getTodayWorkout(generatedPlan) {
   return workout ? { ...workout, dayName } : { isRest: true, dayName };
 }
 
-function getNextWorkout(generatedPlan) {
-  if (!generatedPlan) return null;
+// Looks up each upcoming date's own plan, so the travel plan only applies on
+// dates inside a trip and the normal plan picks up again the day you're back.
+function getNextWorkout(state) {
   const today = new Date();
   for (let i = 1; i <= 7; i++) {
     const next = new Date(today);
     next.setDate(today.getDate() + i);
+    const dateKey = toLocalDateKey(next);
+    const plan = getPlanForDate(state, dateKey);
+    if (!plan) continue;
     const dayName = DAYS[next.getDay()];
-    const workoutId = generatedPlan.schedule?.[dayName];
+    const workoutId = plan.schedule?.[dayName];
     if (workoutId) {
-      const workout = generatedPlan.workouts?.[workoutId];
-      if (workout) return { workout, daysUntil: i, dayName };
+      const workout = plan.workouts?.[workoutId];
+      if (workout) return { workout, daysUntil: i, dayName, dateKey };
     }
   }
   return null;
+}
+
+function prettyDate(dateKey) {
+  return fromLocalDateKey(dateKey).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 }
 
 // "tomorrow" only when it's literally the next day; otherwise name the day so a
@@ -178,7 +190,7 @@ function getContextCard(progress, generatedPlan, userProfile, todayWorkout, toda
 
 export default function HomeScreen({ navigation }) {
   const { state, dispatch } = useApp();
-  const { userProfile, progress, generatedPlan } = state;
+  const { userProfile, progress } = state;
 
   // Force re-render every time this tab gains focus so date-sensitive
   // values (today, todayWorkout, streak) are never stale after midnight.
@@ -186,16 +198,19 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(useCallback(() => { setFocusTick(t => t + 1); }, []));
 
   const today = toLocalDateKey();
+  // During a trip this is the short travel plan; otherwise the normal plan.
+  const generatedPlan = getPlanForDate(state, today);
   const todayWorkout = getTodayWorkout(generatedPlan);
   const todayDone = progress.completedWorkouts.some(w => w.date === today);
-  const nextWorkout = (todayDone || todayWorkout?.isRest) ? getNextWorkout(generatedPlan) : null;
-  const nextSessionWorkout = getNextWorkout(generatedPlan);
-  const programWeek = getProgramWeek(progress.completedWorkouts, state.restart?.date);
+  const nextWorkout = (todayDone || todayWorkout?.isRest) ? getNextWorkout(state) : null;
+  const nextSessionWorkout = getNextWorkout(state);
+  const { programWeek, loadEase } = getWeekContext(state, today);
   const lastCompletedWorkout = progress.completedWorkouts.length > 0
     ? [...progress.completedWorkouts].sort((a, b) => b.date.localeCompare(a.date))[0]
     : null;
   const lastCompletedName = lastCompletedWorkout
-    ? (generatedPlan?.workouts?.[lastCompletedWorkout.type]?.name || lastCompletedWorkout.type)
+    ? (state.generatedPlan?.workouts?.[lastCompletedWorkout.type]?.name
+      || (lastCompletedWorkout.type === 'travel' ? 'Travel Workout' : lastCompletedWorkout.type))
     : null;
 
   // Derive first/last by DATE (never trust array index — older data may be unsorted)
@@ -234,14 +249,29 @@ export default function HomeScreen({ navigation }) {
 
   // Detraining re-entry: after a real break, offer a guided restart. Hidden once
   // a restart is recorded (its date is newer than the last session) or snoozed today.
+  // Trip days don't count as time off — that's what travel mode is for.
   const restart = state.restart;
+  const activeTrip = getActiveTrip(state.trips, today);
+  const upcomingTrip = activeTrip ? null : getCurrentOrUpcomingTrip(state.trips, today);
   const lastActivity = getLastActivityDate(progress);
-  const daysSinceLast = lastActivity ? daysBetweenLocalDateKeys(lastActivity, today) : null;
+  const daysSinceLast = lastActivity
+    ? daysBetweenLocalDateKeys(lastActivity, today) - pausedDaysBetween(state.trips, lastActivity, today)
+    : null;
   const showWelcomeBack =
+    !activeTrip &&
     daysSinceLast != null && daysSinceLast >= RESTART_GAP_DAYS &&
     (!restart || restart.date <= lastActivity) &&
     state.restartSnoozedOn !== today;
-  const rampActive = !!restart && (restart.factor ?? 1) < 1.0 && !(progress.completedWorkouts || []).some(w => w.date >= restart.date);
+  const rampActive = !!loadEase && (loadEase.factor ?? 1) < 1.0 && !(progress.completedWorkouts || []).some(w => w.date >= loadEase.date);
+
+  // Adaptive deloads: offer a recovery week when the logs say you need one.
+  const activeDeload = getActiveDeload(state.deloads, today);
+  const deloadSuggestion = (state.deloadMode || 'adaptive') === 'adaptive' && !showWelcomeBack && !rampActive
+    ? getDeloadSuggestion({
+      setLogs: progress.setLogs, deloads: state.deloads, trips: state.trips,
+      restart, deloadSnoozedOn: state.deloadSnoozedOn, today,
+    })
+    : null;
   const programComplete = programWeek >= 13 && !showWelcomeBack;
 
   function handleNewCycle() {
@@ -284,12 +314,78 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* ── Easing-back indicator (restart applied, first block not yet trained) ── */}
-        {!showWelcomeBack && rampActive && (
+        {!showWelcomeBack && !activeTrip && rampActive && (
           <View style={s.rampChip}>
             <Ionicons name="refresh" size={13} color={colors.accentLight} />
             <Text style={s.rampChipText}>
-              Easing back in · loads set ~{Math.round((1 - (restart.factor ?? 1)) * 100)}% lighter
+              {loadEase.mode === 'travel' ? 'Welcome home' : 'Easing back in'} · loads set ~{Math.round((1 - (loadEase.factor ?? 1)) * 100)}% lighter
             </Text>
+          </View>
+        )}
+
+        {/* ── Travel mode ── */}
+        {activeTrip && (
+          <TouchableOpacity style={s.travelCard} onPress={() => navigation.navigate('Settings')} activeOpacity={0.9}>
+            <Ionicons name="airplane" size={20} color={colors.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.travelTitle}>Travel mode · back {prettyDate(addDays(activeTrip.end, 1))}</Text>
+              <Text style={s.travelSub}>
+                Programme paused at week {Math.min(programWeek, 12)}. {activeTrip.kit === 'gym'
+                  ? 'Normal workouts if you can — no pressure.'
+                  : `${activeTrip.daysPerWeek || 3} short sessions a week + 8–10k steps a day.`}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        {upcomingTrip && daysBetweenLocalDateKeys(today, upcomingTrip.start) <= 14 && (
+          <View style={s.rampChip}>
+            <Ionicons name="airplane-outline" size={13} color={colors.warning} />
+            <Text style={[s.rampChipText, { color: colors.warning }]}>
+              Travel mode starts {prettyDate(upcomingTrip.start)}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Adaptive deload ── */}
+        {activeDeload && !activeTrip && (
+          <View style={s.deloadCard}>
+            <Ionicons name="leaf" size={20} color={colors.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.deloadTitle}>Recovery week · until {prettyDate(addDays(deloadEndDate(activeDeload), -1))}</Text>
+              <Text style={s.deloadSub}>Same workouts, ~40% lighter, one set fewer. You'll come back stronger.</Text>
+            </View>
+            <TouchableOpacity
+              style={s.deloadGhostBtn}
+              onPress={() => dispatch({ type: 'END_DELOAD', payload: today })}
+              activeOpacity={0.85}
+            >
+              <Text style={s.deloadGhostText}>End early</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {deloadSuggestion && (
+          <View style={s.deloadCard}>
+            <Ionicons name="leaf-outline" size={20} color={colors.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.deloadTitle}>Time for a lighter week?</Text>
+              <Text style={s.deloadSub}>{describeDeloadSuggestion(deloadSuggestion)}</Text>
+              <View style={s.deloadBtnRow}>
+                <TouchableOpacity
+                  style={s.deloadBtn}
+                  onPress={() => dispatch({ type: 'START_DELOAD', payload: { start: today, reason: deloadSuggestion.reason } })}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.deloadBtnText}>Start recovery week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.deloadGhostBtn}
+                  onPress={() => dispatch({ type: 'SNOOZE_DELOAD', payload: today })}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.deloadGhostText}>I'm fine</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         )}
 
@@ -458,7 +554,6 @@ export default function HomeScreen({ navigation }) {
           <NextSessionPrepCard
             nextWorkout={nextSessionWorkout}
             setLogs={progress.setLogs || []}
-            restart={state.restart}
             completedWorkouts={progress.completedWorkouts}
             swaps={state.swaps}
             primaryGoal={userProfile.goals?.[0] || 'general_fitness'}
@@ -470,7 +565,7 @@ export default function HomeScreen({ navigation }) {
           <View style={s.planChip}>
             <View style={s.planPip} />
             <Text style={s.planChipText}>
-              {Object.values(generatedPlan.schedule).filter(Boolean).length}-day personalised plan active
+              {Object.values(generatedPlan.schedule).filter(Boolean).length}-day {generatedPlan.isTravel ? 'travel' : 'personalised'} plan active
             </Text>
           </View>
         )}
@@ -499,12 +594,13 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts, swaps, primaryGoal }) {
+function NextSessionPrepCard({ nextWorkout, setLogs, completedWorkouts, swaps: savedSwaps, primaryGoal }) {
   const { state } = useApp();
   const today = toLocalDateKey();
-  const programWeek = getProgramWeek(completedWorkouts, restart?.date);
-  const mod = getProgressionModifier(programWeek);
-  const { workout, daysUntil, dayName } = nextWorkout;
+  const { workout, daysUntil, dayName, dateKey } = nextWorkout;
+  // Judge the week as it will be on the day of that session (trip, deload…).
+  const { mod, loadEase: restart } = getWeekContext(state, dateKey || today);
+  const swaps = mod.isTravel ? {} : savedSwaps;
 
   // "Ramp" mirrors WorkoutScreen's gate: during a post-restart easing block,
   // deterministic eased loads are enforced and the AI is skipped entirely.
@@ -601,7 +697,7 @@ function NextSessionPrepCard({ nextWorkout, setLogs, restart, completedWorkouts,
         <View style={pc.deloadBanner}>
           <Ionicons name="leaf" size={13} color={colors.success} />
           <Text style={pc.deloadText}>
-            <Text style={pc.deloadTextStrong}>Deload week — recover.</Text>
+            <Text style={pc.deloadTextStrong}>Recovery week — go lighter.</Text>
             {' '}Weights below are eased ~40%, not your working weights.
           </Text>
         </View>
@@ -742,6 +838,40 @@ const s = StyleSheet.create({
     fontSize: 11,
     color: colors.accentLight,
   },
+
+  travelCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: colors.heroCardDeep,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.warning + '55',
+  },
+  travelTitle: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.warning },
+  travelSub: { fontFamily: fonts.body, fontSize: 12, color: colors.textSec, lineHeight: 17, marginTop: 2 },
+  deloadCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: colors.heroCardDeep,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.success + '55',
+  },
+  deloadTitle: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.success },
+  deloadSub: { fontFamily: fonts.body, fontSize: 12, color: colors.textSec, lineHeight: 17, marginTop: 2 },
+  deloadBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  deloadBtn: { backgroundColor: colors.success, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  deloadBtnText: { fontFamily: fonts.bodyBold, fontSize: 12, color: colors.onAccent },
+  deloadGhostBtn: { paddingHorizontal: 8, paddingVertical: 7 },
+  deloadGhostText: { fontFamily: fonts.bodySemiBold, fontSize: 12, color: colors.textMuted },
 
   completeCard: {
     flexDirection: 'row',

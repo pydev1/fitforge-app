@@ -165,7 +165,7 @@ export default function ProgressScreen() {
 
   const recentPR = getMostRecentPR(setLogs);
 
-  const programWeek  = getProgramWeek(progress.completedWorkouts, state.restart?.date);
+  const programWeek  = getProgramWeek(progress.completedWorkouts, state.restart?.date, state.trips);
   const displayWeek  = Math.min(programWeek, 12);
   const phaseNum     = Math.min(3, Math.ceil(displayWeek / 4));
   const phaseName    = PHASE_NAMES[phaseNum - 1];

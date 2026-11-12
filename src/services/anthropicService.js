@@ -99,7 +99,8 @@ Rules:
   }
 }
 
-function buildSystemPrompt(userProfile, generatedPlan, progress) {
+// recovery (optional): { trip, deload, deloadMode } — see utils/recovery.js.
+function buildSystemPrompt(userProfile, generatedPlan, progress, recovery) {
   if (!userProfile || !userProfile.name) {
     return `You are a personal trainer. Give evidence-based, practical advice. Be direct and motivating. Keep responses concise and actionable.`;
   }
@@ -197,7 +198,21 @@ Never recommend equipment the client doesn't own. Always align advice with their
     : `\n- No workouts logged yet`;
   basePrompt += contextSection;
 
-  if (daysSinceLast !== null && daysSinceLast >= 3) {
+  const trip = recovery?.trip;
+  if (trip) {
+    const kit = trip.kit === 'gym' ? 'gym access' : trip.kit === 'band' ? 'bodyweight + a resistance band' : 'bodyweight only';
+    basePrompt += `\n\n**Travel Mode — Active**\nThe user is away from ${trip.start} until ${trip.end} with ${kit}. Their 12-week programme is paused and the app has switched them to a short travel workout ${trip.kit === 'gym' ? '(they may use their normal plan)' : `${trip.daysPerWeek || 3}x a week`}. Goal while away: maintain, not progress — short sessions, 8–10k steps a day, sensible eating without strict dieting. Never criticise missed sessions during the trip.`;
+  }
+  if (recovery?.deload) {
+    basePrompt += `\n\n**Recovery Week — Active**\nThe user is in a deload week (started ${recovery.deload.start}). Loads are ~40% lighter with one fewer set. Encourage recovery: sleep, food, walking. Don't push intensity this week.`;
+  }
+  if (recovery?.deloadMode === 'adaptive') {
+    basePrompt += `\n\nDeloads are adaptive: the app offers a lighter week when recent sessions are mostly "hard" sets or after ~10 weeks straight, rather than every 4th week.`;
+  }
+
+  if (trip) {
+    // Travel mode: no accountability nag — time away is planned.
+  } else if (daysSinceLast !== null && daysSinceLast >= 3) {
     basePrompt += `\n\n**ACCOUNTABILITY — Act on this**\nThe user has not trained in ${daysSinceLast} days. A real coach notices and says something. Acknowledge the absence directly and ask what happened — before answering anything else. Be honest but not harsh. Then focus only on getting them back to ONE session, not the whole plan.`;
   } else if (!todayLogged) {
     basePrompt += `\n\nToday's session hasn't been logged yet. If it's relevant, check in on whether they've done it.`;
@@ -238,7 +253,7 @@ Please respond with:
 Keep it structured, practical, and specific to their equipment.`;
 }
 
-export function streamChatMessage(messages, apiKey, userProfile, generatedPlan, progress, onChunk, onDone, onError) {
+export function streamChatMessage(messages, apiKey, userProfile, generatedPlan, progress, onChunk, onDone, onError, recovery) {
   if (!apiKey) {
     onError(new Error('No API key set. Please add your Anthropic API key in Settings.'));
     return;
@@ -290,7 +305,7 @@ export function streamChatMessage(messages, apiKey, userProfile, generatedPlan, 
     model: MODEL,
     max_tokens: 1024,
     stream: true,
-    system: buildSystemPrompt(userProfile, generatedPlan, progress),
+    system: buildSystemPrompt(userProfile, generatedPlan, progress, recovery),
     messages: messages.map(m => ({ role: m.role, content: m.content })),
   }));
 }

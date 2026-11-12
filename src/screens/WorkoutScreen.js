@@ -9,10 +9,11 @@ import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
 import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
 import {
-  getProgramWeek, getProgressionModifier, applyProgression,
+  getWeekContext, applyProgression,
   isBandExercise, BAND_SWAPS,
 } from '../utils/progression';
-import { makeWorkoutExercise } from '../utils/workoutGenerator';
+import { makeWorkoutExercise, getPlanForDate } from '../utils/workoutGenerator';
+import { getActiveTrip } from '../utils/recovery';
 import { getDumbbellLadder, isTwoDumbbell, snapToLoad, nextLoadUp, nextLoadDown } from '../utils/equipment';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { getWorkoutSuggestions } from '../services/anthropicService';
@@ -66,7 +67,9 @@ export default function WorkoutScreen({ route }) {
     undoFn?.();
   }
 
-  const { generatedPlan, progress, userProfile } = state;
+  const { progress, userProfile } = state;
+  // During a trip this is the short travel plan; otherwise the normal plan.
+  const generatedPlan = getPlanForDate(state, toLocalDateKey());
   const todayKey = getTodayKey();
   const todayWorkoutId = generatedPlan?.schedule?.[todayKey] ?? null;
   const todayWorkout = todayWorkoutId ? generatedPlan?.workouts?.[todayWorkoutId] : null;
@@ -91,7 +94,9 @@ export default function WorkoutScreen({ route }) {
       <View style={s.header}>
         <Text style={s.title}>Workouts</Text>
         <Text style={s.subtitle}>
-          {totalDays > 0 ? `${totalDays}-day split` : 'No plan yet'} · personalised for {userProfile.name || 'you'}
+          {generatedPlan?.isTravel
+            ? `Travel mode · ${totalDays} short sessions a week`
+            : `${totalDays > 0 ? `${totalDays}-day split` : 'No plan yet'} · personalised for ${userProfile.name || 'you'}`}
         </Text>
       </View>
 
@@ -174,6 +179,8 @@ const PHASE_COLORS = {
   'Strength':   colors.secondary,
   'Complete':   colors.warning,
   'Deload':     colors.success,
+  'Consolidate': colors.info,
+  'Travel':     colors.warning,
 };
 
 function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo, onSetSaved, onGoToPosture }) {
@@ -186,14 +193,16 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
-  const restart = state.restart;
-  const swaps = state.swaps || {};
   const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
 
   // The 12-week programme restarts at week 1 from the restart date, so a long
-  // layoff doesn't leave you mid-cycle (or on a phantom deload week).
-  const programWeek = getProgramWeek(completedWorkouts, restart?.date);
-  const mod = getProgressionModifier(programWeek);
+  // layoff doesn't leave you mid-cycle (or on a phantom deload week). Trip days
+  // are paused, and deloads are adaptive unless the user chose fixed ones.
+  // `restart` here is the load ease in force — a programme restart, or the
+  // milder one applied when you come home from a trip.
+  const { programWeek, mod, loadEase: restart } = getWeekContext(state, today);
+  // Swaps point at dumbbell alternatives, which you won't have while travelling.
+  const swaps = mod.isTravel ? {} : (state.swaps || {});
 
   // "Ramp" = the eased-in block right after a restart, until a full session has
   // been completed on/after the restart date. Keyed on completed workouts (not
@@ -281,15 +290,20 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   }
 
   if (!workout) {
+    const travelling = !!getActiveTrip(state.trips, today);
     return (
       <View style={s.restContainer}>
-        <Text style={{ fontSize: 48 }}>😴</Text>
-        <Text style={s.restTitle}>Rest Day</Text>
-        <Text style={s.restSubtitle}>{dayName} · Muscle growth happens during recovery</Text>
+        <Text style={{ fontSize: 48 }}>{travelling ? '🧳' : '😴'}</Text>
+        <Text style={s.restTitle}>{travelling ? 'Travel Rest Day' : 'Rest Day'}</Text>
+        <Text style={s.restSubtitle}>
+          {dayName} · {travelling ? 'Programme paused while you\'re away' : 'Muscle growth happens during recovery'}
+        </Text>
         <View style={s.restTip}>
           <Ionicons name="information-circle-outline" size={16} color={colors.info} style={{ marginRight: 8 }} />
           <Text style={s.restTipText}>
-            Use today for a 10-min walk, light stretching, or the Posture Guide routine. Recovery is part of the programme.
+            {travelling
+              ? 'Aim for 8–10k steps today — walking is the easiest way to stay on track while away. Enjoy the trip.'
+              : 'Use today for a 10-min walk, light stretching, or the Posture Guide routine. Recovery is part of the programme.'}
           </Text>
         </View>
         <TouchableOpacity style={[s.postureLinkBanner, { width: '100%', marginTop: 16 }]} onPress={onGoToPosture} activeOpacity={0.8}>
@@ -339,10 +353,10 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             <Ionicons name="refresh" size={13} color={colors.onAccent} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.restartTitle}>Easing back in</Text>
+            <Text style={s.restartTitle}>{restart?.mode === 'travel' ? 'Welcome home' : 'Easing back in'}</Text>
             <Text style={s.restartSub}>
-              Loads set ~{Math.round((1 - (restart?.factor ?? 1)) * 100)}% lighter after {restart?.weeksOff ?? 0} week
-              {(restart?.weeksOff ?? 0) === 1 ? '' : 's'} off. Hit these clean and they climb back fast.
+              Loads set ~{Math.round((1 - (restart?.factor ?? 1)) * 100)}% lighter after {restart?.mode === 'travel' ? 'your trip' : `${restart?.weeksOff ?? 0} week${(restart?.weeksOff ?? 0) === 1 ? '' : 's'} off`}.
+              {' '}Hit these clean and they climb back fast.
             </Text>
           </View>
         </View>
@@ -350,7 +364,9 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
 
       <View style={[s.progressionBanner, { borderColor: (PHASE_COLORS[mod.label] || colors.accent) + '50' }]}>
         <View style={s.progressionLeft}>
-          <Text style={s.progressionWeek}>Week {Math.min(programWeek, 12)} of 12</Text>
+          <Text style={s.progressionWeek}>
+            {mod.isTravel ? `Paused at week ${Math.min(programWeek, 12)}` : `Week ${Math.min(programWeek, 12)} of 12`}
+          </Text>
           <View style={[s.progressionPill, { backgroundColor: (PHASE_COLORS[mod.label] || colors.accent) + '22' }]}>
             <Text style={[s.progressionPillText, { color: PHASE_COLORS[mod.label] || colors.accent }]}>{mod.label}</Text>
           </View>
@@ -376,7 +392,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         // Offer the dumbbell swap unless its target is already in today's session.
         const swapCandidate = BAND_SWAPS[orig.id];
         const swapCollision = swapCandidate && workout.exercises.some(e => e.id === swapCandidate);
-        const swapToId = ex.swappedFrom || swapCollision ? null : swapCandidate;
+        const swapToId = mod.isTravel || ex.swappedFrom || swapCollision ? null : swapCandidate;
         return (
           <ExerciseCard
             key={orig.id}
@@ -591,7 +607,7 @@ function DetailRow({ icon, label, value }) {
 
 function WeeklyTab({ generatedPlan, completedWorkouts }) {
   const { state } = useApp();
-  const swaps = state.swaps || {};
+  const swaps = generatedPlan?.isTravel ? {} : (state.swaps || {});
   const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
   const todayKey = getTodayKey();
   const [expandedDay, setExpandedDay] = React.useState(null);
@@ -1079,7 +1095,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         <View style={sl.aiBanner}>
           <Ionicons name="leaf" size={13} color={colors.success} />
           <Text style={sl.aiBannerText}>
-            <Text style={[sl.aiBannerStrong, { color: colors.success }]}>Deload week — recover.</Text>
+            <Text style={[sl.aiBannerStrong, { color: colors.success }]}>Recovery week — go lighter.</Text>
             {' '}Suggested weights eased ~40%. Keep it light and clean.
           </Text>
         </View>
@@ -1087,7 +1103,9 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
         <View style={[sl.aiBanner, { borderColor: colors.accent + '55' }]}>
           <Ionicons name="refresh" size={13} color={colors.accentLight} />
           <Text style={sl.aiBannerText}>
-            <Text style={sl.aiBannerStrong}>Back after a break — starting ~{easePct}% lighter.</Text>
+            <Text style={sl.aiBannerStrong}>
+              {restart?.mode === 'travel' ? 'Back from your trip' : 'Back after a break'} — starting ~{easePct}% lighter.
+            </Text>
             {' '}Build up from here; it comes back quickly.
           </Text>
         </View>
