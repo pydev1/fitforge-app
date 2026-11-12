@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, Switch,
+  View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { themedStyles } from '../theme/themed';
 import { fonts } from '../theme/fonts';
 import { BUILD_NUMBER, BUILD_DATE, GIT_HASH } from '../constants/buildInfo';
 import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
@@ -155,6 +155,9 @@ export default function SettingsScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Appearance */}
+        <AppearanceSection state={state} dispatch={dispatch} />
+
         {/* API Key */}
         <Section title="Anthropic API Key" icon="key-outline">
           <Text style={s.note}>Required for your Coach and Form Check features. Get yours at console.anthropic.com</Text>
@@ -293,7 +296,7 @@ export default function SettingsScreen({ navigation }) {
         {/* Regenerate Plan */}
         <View style={{ marginHorizontal: 16, marginTop: 20 }}>
           <TouchableOpacity style={s.regenBtn} onPress={regeneratePlan} activeOpacity={0.85}>
-            <Ionicons name="refresh-circle" size={20} color={colors.white} style={{ marginRight: 8 }} />
+            <Ionicons name="refresh-circle" size={20} color={colors.accentLight} style={{ marginRight: 8 }} />
             <Text style={s.regenBtnText}>Regenerate Workout Plan</Text>
           </TouchableOpacity>
           <Text style={s.regenNote}>Rebuilds your entire plan from your updated profile settings above.</Text>
@@ -301,7 +304,7 @@ export default function SettingsScreen({ navigation }) {
 
         {/* Program restart */}
         <Section title="Coming Back From A Break" icon="refresh-outline">
-          {state.restart && (
+          {state.restart && (state.restart.factor ?? 1) < 1 && (
             <View style={s.restartStatus}>
               <Ionicons name="checkmark-circle" size={15} color={colors.accentLight} />
               <Text style={s.restartStatusText}>
@@ -394,6 +397,38 @@ export default function SettingsScreen({ navigation }) {
 
 function prettyDate(dateKey) {
   return fromLocalDateKey(dateKey).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const APPEARANCES = [
+  { id: 'system', label: 'System', icon: 'phone-portrait-outline' },
+  { id: 'light',  label: 'Light',  icon: 'sunny-outline' },
+  { id: 'dark',   label: 'Dark',   icon: 'moon-outline' },
+];
+
+// Applies instantly — the app re-themes in place and you stay on this screen.
+function AppearanceSection({ state, dispatch }) {
+  const current = state.appearance || 'system';
+  return (
+    <Section title="Appearance" icon="color-palette-outline">
+      <View style={s.segment}>
+        {APPEARANCES.map(a => {
+          const on = current === a.id;
+          return (
+            <TouchableOpacity
+              key={a.id}
+              style={[s.segmentItem, on && s.segmentItemOn]}
+              onPress={() => dispatch({ type: 'SET_APPEARANCE', payload: a.id })}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={a.icon} size={16} color={on ? colors.accentLight : colors.textSec} />
+              <Text style={[s.segmentText, on && s.segmentTextOn]}>{a.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <Text style={s.scheduleHint}>System follows your phone's light/dark setting.</Text>
+    </Section>
+  );
 }
 
 const DELOAD_MODES = [
@@ -676,26 +711,25 @@ function InfoRow({ label, value }) {
 
 /* ─── Styles ─────────────────────────────────────────────────────── */
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border,
   },
-  title: { fontSize: 18, color: colors.text, fontWeight: '700' },
-  saveBtn: { backgroundColor: colors.accent, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8 },
-  saveBtnText: { fontSize: 13, color: colors.onAccent, fontWeight: '700' },
+  title: { fontSize: 20, color: colors.text, fontWeight: '700' },
+  saveBtn: { backgroundColor: colors.accent, borderRadius: 999, paddingHorizontal: 20, paddingVertical: 9 },
+  saveBtnText: { fontSize: 14, color: colors.onAccent, fontWeight: '700' },
   note: { fontSize: 12, color: colors.textSec, lineHeight: 18, marginBottom: 12 },
   keyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
-    backgroundColor: colors.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: colors.bg, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 13, color: colors.text, borderWidth: 1, borderColor: colors.border, fontFamily: fonts.data,
   },
   eyeBtn: {
@@ -707,7 +741,7 @@ const s = StyleSheet.create({
   row2: { flexDirection: 'row' },
   bmiRow: {
     flexDirection: 'row', alignItems: 'center', marginTop: 8,
-    backgroundColor: colors.bg, borderRadius: 10, padding: 10,
+    backgroundColor: colors.bg, borderRadius: 14, padding: 10,
     borderWidth: 1, borderColor: colors.border,
   },
   bmiLabel: { fontSize: 13, color: colors.textSec },
@@ -715,35 +749,34 @@ const s = StyleSheet.create({
   bmiCat: { fontSize: 13, color: colors.textSec },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   numChip: {
-    width: 52, height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
+    width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: 'transparent',
   },
   numChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   numChipText: { fontSize: 18, color: colors.textSec, fontWeight: '700' },
   numChipTextActive: { color: colors.onAccent },
   dayChip: {
-    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
-    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: 'transparent',
   },
-  dayChipRest: { backgroundColor: colors.accentDim + '40', borderColor: colors.accent },
+  dayChipRest: { backgroundColor: colors.accentDim, borderColor: colors.accentDim },
   dayChipText: { fontSize: 12, color: colors.textSec, fontWeight: '600' },
   dayChipTextRest: { color: colors.accentLight },
   regenBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.accentDim, borderRadius: 14, paddingVertical: 14,
-    borderWidth: 1, borderColor: colors.accent,
+    backgroundColor: colors.accentDim, borderRadius: 999, paddingVertical: 14,
   },
-  regenBtnText: { fontSize: 14, color: '#fff', fontWeight: '700' },
-  regenNote: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 16 },
+  regenBtnText: { fontSize: 14, color: colors.accentLight, fontWeight: '700' },
+  regenNote: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 16 },
   restartStatus: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: colors.accentDim, borderRadius: 10, padding: 10, marginBottom: 12,
+    backgroundColor: colors.accentDim, borderRadius: 14, padding: 10, marginBottom: 12,
     borderWidth: 1, borderColor: colors.accent + '40',
   },
   restartStatusText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 17 },
   restartBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 14,
+    backgroundColor: colors.accent, borderRadius: 999, paddingVertical: 14,
   },
   restartBtnText: { fontSize: 14, color: colors.onAccent, fontWeight: '700' },
   restartClearBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, marginTop: 4 },
@@ -751,55 +784,63 @@ const s = StyleSheet.create({
   reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   reminderLabel: { fontSize: 14, color: colors.text, fontWeight: '600' },
   reminderSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  segment: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 999, padding: 4, marginBottom: 6 },
+  segmentItem: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderRadius: 999,
+  },
+  segmentItemOn: { backgroundColor: colors.accentDim },
+  segmentText: { fontSize: 14, color: colors.textSec, fontWeight: '500' },
+  segmentTextOn: { color: colors.accentLight, fontWeight: '700' },
   optionRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    borderRadius: 12, padding: 12, marginBottom: 8,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+    borderRadius: 16, padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card,
   },
   optionRowActive: { borderColor: colors.accent, backgroundColor: colors.accentDim },
   optionLabel: { fontSize: 14, color: colors.textSec, fontWeight: '700' },
   optionBlurb: { fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 2 },
   secondaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    borderRadius: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.success + '66',
+    borderRadius: 18, paddingVertical: 12, borderWidth: 1, borderColor: colors.success + '66',
   },
   secondaryBtnText: { fontSize: 13, color: colors.success, fontWeight: '700' },
   stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepBtn: {
-    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14,
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
   },
   stepBtnText: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
   stepValue: { flex: 1, textAlign: 'center', fontSize: 13, color: colors.text, fontWeight: '700' },
-  scheduleHint: { fontSize: 11, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
-});
+  scheduleHint: { fontSize: 12, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
+}));
 
-const ss = StyleSheet.create({
+const ss = themedStyles(() => ({
   section: { marginHorizontal: 16, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  sectionTitle: { fontSize: 13, color: colors.textSec, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  sectionBody: { backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border },
-});
+  sectionTitle: { fontSize: 15, color: colors.accentLight, fontWeight: '700' },
+  sectionBody: { backgroundColor: colors.card, borderRadius: 22, padding: 16, borderWidth: 1, borderColor: colors.border },
+}));
 
-const f = StyleSheet.create({
+const f = themedStyles(() => ({
   wrap: { marginBottom: 12 },
   label: { fontSize: 12, color: colors.textSec, marginBottom: 6, fontWeight: '600' },
   input: {
-    backgroundColor: colors.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 15, color: colors.text, borderWidth: 1, borderColor: 'transparent',
   },
   chip: {
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
   },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipSmall: { paddingHorizontal: 10, paddingVertical: 6 },
-  chipText: { fontSize: 12, color: colors.textSec, fontWeight: '600' },
-  chipTextActive: { color: colors.onAccent },
-});
+  chipActive: { backgroundColor: colors.accentDim, borderColor: colors.accentDim },
+  chipSmall: { paddingHorizontal: 12, paddingVertical: 6 },
+  chipText: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
+  chipTextActive: { color: colors.accentLight, fontWeight: '700' },
+}));
 
-const ir = StyleSheet.create({
+const ir = themedStyles(() => ({
   row: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
-  label: { fontSize: 11, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
+  label: { fontSize: 12, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
   value: { fontSize: 13, color: colors.text },
-});
+}));

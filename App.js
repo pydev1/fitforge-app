@@ -1,50 +1,58 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { View, ActivityIndicator, Text, TextInput } from 'react-native';
+import { View, ActivityIndicator, Text, TextInput, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import {
-  BigShoulders_900Black,
-} from '@expo-google-fonts/big-shoulders';
-import {
-  IBMPlexSans_400Regular,
-  IBMPlexSans_400Regular_Italic,
-  IBMPlexSans_500Medium,
-  IBMPlexSans_600SemiBold,
-  IBMPlexSans_700Bold,
-  IBMPlexSans_700Bold_Italic,
-} from '@expo-google-fonts/ibm-plex-sans';
-import {
-  IBMPlexMono_400Regular,
-  IBMPlexMono_500Medium,
-  IBMPlexMono_600SemiBold,
-} from '@expo-google-fonts/ibm-plex-mono';
-import { AppProvider } from './src/context/AppContext';
+  Roboto_400Regular,
+  Roboto_400Regular_Italic,
+  Roboto_500Medium,
+  Roboto_600SemiBold,
+  Roboto_700Bold,
+  Roboto_700Bold_Italic,
+  Roboto_800ExtraBold,
+} from '@expo-google-fonts/roboto';
+import { AppProvider, useApp } from './src/context/AppContext';
 import AppNavigator from './src/navigation/AppNavigator';
-import { colors } from './src/theme/colors';
+import { colors, applyTheme, getThemeScheme } from './src/theme/colors';
 
-// App-wide default body font. Screens that set their own fontFamily (most of
-// them) override this; screens with no custom typography at all — previously
-// left on the OS system font — now at least render in the brand's body face
-// instead of looking unstyled next to everything else.
+// App-wide default body font. Screens that set their own fontFamily override
+// this; anything unstyled still renders in the brand face.
 Text.defaultProps = Text.defaultProps || {};
-Text.defaultProps.style = [{ fontFamily: 'IBMPlexSans_400Regular' }, Text.defaultProps.style];
+Text.defaultProps.style = [{ fontFamily: 'Roboto_400Regular' }, Text.defaultProps.style];
 TextInput.defaultProps = TextInput.defaultProps || {};
-TextInput.defaultProps.style = [{ fontFamily: 'IBMPlexSans_400Regular' }, TextInput.defaultProps.style];
+TextInput.defaultProps.style = [{ fontFamily: 'Roboto_400Regular' }, TextInput.defaultProps.style];
+
+// Picks light/dark from Settings → Appearance ('system' follows the phone).
+// The palette is swapped in place, then the navigator is remounted under a new
+// key so every screen re-renders with the new colours. App state (logs,
+// profile, trips) lives above this in AppProvider and is untouched.
+function ThemedApp() {
+  const { state } = useApp();
+  const systemScheme = useColorScheme();
+  const pref = state.appearance || 'system';
+  const scheme = pref === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : pref;
+  applyTheme(scheme);
+  const active = getThemeScheme();
+
+  return (
+    <View key={active} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar style={colors.isDark ? 'light' : 'dark'} backgroundColor={colors.bg} />
+      <AppNavigator />
+    </View>
+  );
+}
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    BigShoulders_900Black,
-    IBMPlexSans_400Regular,
-    IBMPlexSans_400Regular_Italic,
-    IBMPlexSans_500Medium,
-    IBMPlexSans_600SemiBold,
-    IBMPlexSans_700Bold,
-    IBMPlexSans_700Bold_Italic,
-    IBMPlexMono_400Regular,
-    IBMPlexMono_500Medium,
-    IBMPlexMono_600SemiBold,
+    Roboto_400Regular,
+    Roboto_400Regular_Italic,
+    Roboto_500Medium,
+    Roboto_600SemiBold,
+    Roboto_700Bold,
+    Roboto_700Bold_Italic,
+    Roboto_800ExtraBold,
   });
 
   if (!fontsLoaded) {
@@ -58,8 +66,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppProvider>
-        <StatusBar style="light" backgroundColor={colors.bg} />
-        <AppNavigator />
+        <ThemedApp />
       </AppProvider>
     </SafeAreaProvider>
   );

@@ -4,13 +4,14 @@ import { getActiveTrip } from './recovery';
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const COLORS = {
-  push:  '#EA580C',   // brand orange
-  pull:  '#3B82F6',
-  legs:  '#10B981',
-  full:  '#F43F5E',
-  core:  '#FBBF24',   // amber (distinct from orange)
-  upper: '#FB923C',   // lighter orange
-  lower: '#06B6D4',
+  push:  '#E8710A',   // orange
+  pull:  '#2F6BEA',   // blue
+  legs:  '#00A693',   // teal
+  full:  '#D63F76',   // raspberry
+  core:  '#D99A06',   // amber
+  upper: '#F08A24',   // light orange
+  lower: '#1297BF',   // cyan
+  travel: '#C27C0E',  // travel amber
 };
 
 // Priority-ordered exercise IDs per workout slot
@@ -332,6 +333,21 @@ export function generateTravelPlan(userProfile, trip) {
 // otherwise the user's normal plan.
 export function getPlanForDate(state, dateKey) {
   const trip = getActiveTrip(state.trips, dateKey);
-  if (trip) return generateTravelPlan(state.userProfile, trip) || state.generatedPlan;
-  return state.generatedPlan;
+  if (trip) return generateTravelPlan(state.userProfile, trip) || withCurrentColors(state.generatedPlan);
+  return withCurrentColors(state.generatedPlan);
+}
+
+// Saved plans carry the colour they were generated with; repaint them with the
+// current palette so a redesign doesn't need a "Regenerate plan" tap.
+const repainted = new WeakMap();
+function withCurrentColors(plan) {
+  if (!plan?.workouts) return plan;
+  if (repainted.has(plan)) return repainted.get(plan);
+  const workouts = {};
+  Object.entries(plan.workouts).forEach(([id, w]) => {
+    workouts[id] = COLORS[id] ? { ...w, color: COLORS[id] } : w;
+  });
+  const next = { ...plan, workouts };
+  repainted.set(plan, next);
+  return next;
 }

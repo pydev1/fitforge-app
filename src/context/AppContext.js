@@ -10,6 +10,8 @@ const STORAGE_KEY = '@fitforge_v3';
 const defaultState = {
   apiKey: '',
   isOnboarded: false,
+  // 'system' follows the phone's light/dark setting; or force 'light' / 'dark'.
+  appearance: 'system',
   reminderEnabled: false,
   reminderHour: 19,
   userProfile: {
@@ -153,6 +155,8 @@ function reducer(state, action) {
       return { ...state, restart: null };
     case 'SNOOZE_RESTART':
       return { ...state, restartSnoozedOn: action.payload };
+    case 'SET_APPEARANCE':
+      return { ...state, appearance: action.payload };
     case 'SET_DELOAD_MODE':
       return { ...state, deloadMode: action.payload };
     case 'START_DELOAD':

@@ -4,7 +4,7 @@
     "slug": "fitforge-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#15171B",
     "icon": "./assets/icon.png",
     "splash": {

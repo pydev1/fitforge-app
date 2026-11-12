@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -17,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../context/AppContext';
 import { streamChatMessage } from '../services/anthropicService';
 import { colors } from '../theme/colors';
+import { themedStyles } from '../theme/themed';
 import { daysBetweenLocalDateKeys, toLocalDateKey } from '../utils/date';
 import { getPlanForDate } from '../utils/workoutGenerator';
 import { getActiveTrip, getActiveDeload } from '../utils/recovery';
@@ -305,7 +305,7 @@ function TypingIndicator() {
   );
 }
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
@@ -326,7 +326,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { fontSize: 16, color: colors.text, fontWeight: '700' },
-  headerSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  headerSub: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   clearBtn: {
     width: 34,
     height: 34,
@@ -359,13 +359,13 @@ const s = StyleSheet.create({
   coachAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
-  coachAvatarText: { fontSize: 9, color: colors.onAccent, fontWeight: '700' },
+  coachAvatarText: { fontSize: 10, color: colors.onAccent, fontWeight: '700' },
   bubble: {
     maxWidth: '80%',
     borderRadius: 18,
@@ -428,11 +428,11 @@ const s = StyleSheet.create({
   suggestionCard: {
     width: '47%',
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 18,
     padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'flex-start',
   },
   suggestionCardText: { fontSize: 13, color: colors.text, lineHeight: 18, fontWeight: '500' },
-});
+}));

@@ -1,33 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Modal, TextInput, Alert, Dimensions,
+  View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { themedStyles, themed } from '../theme/themed';
 import { fonts } from '../theme/fonts';
 import { fromLocalDateKey, toLocalDateKey } from '../utils/date';
 import { getProgramWeek } from '../utils/progression';
 
 const { width } = Dimensions.get('window');
+
+// '#RRGGBB' + opacity → rgba(), for chart-kit's colour callbacks.
+function withAlpha(hex, opacity) {
+  const h = String(hex).replace('#', '');
+  if (h.length !== 6) return hex;
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${opacity})`;
+}
 const CHART_W = width - 40;
 
-const CHART_CONFIG = {
-  backgroundGradientFrom: colors.surface,
-  backgroundGradientTo: colors.surface,
+const CHART_CONFIG = themed(() => ({
+  backgroundGradientFrom: colors.card,
+  backgroundGradientTo: colors.card,
   backgroundGradientFromOpacity: 1,
   backgroundGradientToOpacity: 1,
-  color: (opacity = 1) => `rgba(56, 189, 248, ${opacity})`,
+  color: (opacity = 1) => withAlpha(colors.ring2, opacity),
   labelColor: () => colors.textMuted,
   strokeWidth: 2.5,
   propsForDots: {
     r: '4',
     strokeWidth: '2',
     stroke: colors.accent,
-    fill: colors.bg,
+    fill: colors.card,
   },
   propsForBackgroundLines: {
     stroke: colors.border,
@@ -35,19 +43,21 @@ const CHART_CONFIG = {
     strokeWidth: 1,
   },
   decimalPlaces: 1,
-};
+  propsForLabels: { fontFamily: fonts.body, fontSize: 11 },
+}));
 
-const MINI_CHART_CONFIG = {
-  backgroundGradientFrom: colors.bg,
-  backgroundGradientTo: colors.bg,
+const MINI_CHART_CONFIG = themed(() => ({
+  backgroundGradientFrom: colors.card,
+  backgroundGradientTo: colors.card,
   backgroundGradientFromOpacity: 1,
   backgroundGradientToOpacity: 1,
-  color: (opacity = 1) => `rgba(56, 189, 248, ${opacity})`,
+  color: (opacity = 1) => withAlpha(colors.ring2, opacity),
   labelColor: () => colors.textMuted,
   strokeWidth: 2,
-  propsForDots: { r: '3', strokeWidth: '1', stroke: colors.accent, fill: colors.bg },
+  propsForDots: { r: '3', strokeWidth: '1', stroke: colors.accent, fill: colors.card },
   decimalPlaces: 1,
-};
+  propsForLabels: { fontFamily: fonts.body, fontSize: 11 },
+}));
 
 function buildChartData(entries, limit = 7) {
   const slice = entries.slice(-limit);
@@ -349,7 +359,7 @@ export default function ProgressScreen() {
                   height={160}
                   chartConfig={{
                     ...CHART_CONFIG,
-                    color: (opacity = 1) => `rgba(34, 211, 238, ${opacity})`,
+                    color: (opacity = 1) => withAlpha(colors.ring1, opacity),
                     propsForDots: { ...CHART_CONFIG.propsForDots, stroke: colors.info },
                   }}
                   bezier
@@ -653,7 +663,7 @@ function StrengthProgress({ setLogs }) {
   );
 }
 
-const FEEL_COLORS = { easy: colors.success, good: colors.info, hard: colors.secondary };
+const FEEL_COLORS = themed(() => ({ easy: colors.success, good: colors.info, hard: colors.secondary }));
 
 function EmptyChart({ message }) {
   return (
@@ -664,16 +674,18 @@ function EmptyChart({ message }) {
   );
 }
 
+// Same split colours as the workout generator — readable on light and dark.
 const WORKOUT_COLORS = {
-  push: '#EA580C',
-  pull: '#3B82F6',
-  legs: '#10B981',
-  legs_core: '#10B981',
-  full: '#F43F5E',
-  upper: '#FB923C',
-  lower: '#06B6D4',
-  core: '#FBBF24',
-  posture: '#F59E0B',
+  push: '#E8710A',
+  pull: '#2F6BEA',
+  legs: '#00A693',
+  legs_core: '#00A693',
+  full: '#D63F76',
+  upper: '#F08A24',
+  lower: '#1297BF',
+  core: '#D99A06',
+  posture: '#8E5BD8',
+  travel: '#C27C0E',
 };
 
 const WORKOUT_LABELS = {
@@ -686,17 +698,18 @@ const WORKOUT_LABELS = {
   lower: 'Lower body',
   core: 'Core day',
   posture: 'Posture session',
+  travel: 'Travel workout',
 };
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10,
   },
-  title: { fontFamily: fonts.display, fontSize: 34, color: colors.text, letterSpacing: 0.5 },
-  subtitle: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textSec, marginTop: 3, lineHeight: 19 },
+  title: { fontFamily: fonts.display, fontSize: 28, color: colors.text, letterSpacing: -0.3 },
+  subtitle: { fontFamily: fonts.body, fontSize: 13, color: colors.textSec, marginTop: 3, lineHeight: 19 },
   logBtn: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.accent,
@@ -709,7 +722,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 4, gap: 10,
   },
   statCard: {
-    flex: 1, backgroundColor: colors.surface,
+    flex: 1, backgroundColor: colors.card,
     borderRadius: 18, padding: 14,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border,
@@ -718,44 +731,44 @@ const s = StyleSheet.create({
     backgroundColor: colors.statCard,
     borderColor: colors.statCardBorder,
   },
-  statCardPrimaryGoal: { fontFamily: fonts.dataSemiBold, fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
+  statCardPrimaryGoal: { fontFamily: fonts.dataSemiBold, fontSize: 10, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
   statCardValueBlue: { fontFamily: fonts.display, fontSize: 28, color: '#fff', letterSpacing: 0.5 },
   statCardUnitBlue: { fontFamily: fonts.dataMedium, fontSize: 13, color: 'rgba(255,255,255,0.7)' },
-  statCardLabelBlue: { fontFamily: fonts.bodyMedium, fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  statCardGoalBlue: { fontFamily: fonts.bodyItalic, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
+  statCardLabelBlue: { fontFamily: fonts.bodyMedium, fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  statCardGoalBlue: { fontFamily: fonts.body, fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
   statCardValue: { fontFamily: fonts.display, fontSize: 26, color: colors.text, letterSpacing: 0.5 },
   statCardUnit: { fontFamily: fonts.dataMedium, fontSize: 12, color: colors.textSec },
-  statCardLabel: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.textMuted, marginTop: 2 },
+  statCardLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.textMuted, marginTop: 2 },
 
   prCard: {
     marginHorizontal: 20, marginTop: 14,
-    backgroundColor: colors.heroCardDeep,
+    backgroundColor: colors.card,
     borderRadius: 18, padding: 16,
     flexDirection: 'row', alignItems: 'center', gap: 14,
     borderWidth: 1, borderColor: colors.accent + '55',
   },
   prIconWrap: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: 'rgba(56,189,248,0.16)',
+    backgroundColor: colors.accentDim,
     alignItems: 'center', justifyContent: 'center',
   },
   prTitle: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.text, marginBottom: 3 },
-  prSub: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.heroTextSec },
+  prSub: { fontFamily: fonts.body, fontSize: 12, color: colors.heroTextSec },
 
   chartCard: {
     marginHorizontal: 20, marginTop: 14,
-    backgroundColor: colors.surface, borderRadius: 20,
+    backgroundColor: colors.card, borderRadius: 20,
     padding: 16, borderWidth: 1, borderColor: colors.border,
   },
   chartHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12,
   },
   chartTitle: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.text, marginBottom: 2 },
-  chartSub: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSec },
+  chartSub: { fontFamily: fonts.body, fontSize: 12, color: colors.textSec },
   chartCurrent: { fontFamily: fonts.dataSemiBold, fontSize: 13, color: colors.textSec },
-  chart: { borderRadius: 10, marginLeft: -8 },
+  chart: { borderRadius: 14, marginLeft: -8 },
   emptyChart: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyChartText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  emptyChartText: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   chartCardEmpty: { alignItems: 'center', paddingVertical: 28 },
   inlineLogBtn: {
     flexDirection: 'row', alignItems: 'center',
@@ -766,7 +779,7 @@ const s = StyleSheet.create({
   inlineEmpty: {
     paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  inlineEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, flex: 1 },
+  inlineEmptyText: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, flex: 1 },
   inlineLogLink: { fontFamily: fonts.bodySemiBold, fontSize: 12, color: colors.accentLight, marginLeft: 8 },
 
   workoutRow: {
@@ -775,13 +788,13 @@ const s = StyleSheet.create({
   },
   workoutDot: { width: 8, height: 8, borderRadius: 4 },
   workoutType: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.text },
-  workoutMuscles: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textSec, marginTop: 1 },
-  workoutDate: { fontFamily: fonts.data, fontSize: 11, color: colors.textMuted },
-  emptyText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
+  workoutMuscles: { fontFamily: fonts.body, fontSize: 12, color: colors.textSec, marginTop: 1 },
+  workoutDate: { fontFamily: fonts.data, fontSize: 12, color: colors.textMuted },
+  emptyText: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted, marginTop: 10, lineHeight: 20 },
 
   sessionDetail: {
     backgroundColor: colors.bg,
-    borderRadius: 10,
+    borderRadius: 14,
     padding: 10,
     marginBottom: 4,
     gap: 6,
@@ -805,13 +818,13 @@ const s = StyleSheet.create({
 
   goalCard: {
     marginHorizontal: 20, marginTop: 14,
-    backgroundColor: colors.surface, borderRadius: 20,
+    backgroundColor: colors.card, borderRadius: 20,
     padding: 16, borderWidth: 1, borderColor: colors.border, alignItems: 'center',
   },
   goalTitle: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.text, marginBottom: 8 },
-  goalText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSec, textAlign: 'center', lineHeight: 20 },
+  goalText: { fontFamily: fonts.body, fontSize: 12, color: colors.textSec, textAlign: 'center', lineHeight: 20 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   modalCard: {
     backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 24, borderTopWidth: 1, borderColor: colors.border,
@@ -822,31 +835,31 @@ const s = StyleSheet.create({
   modalTitle: { fontFamily: fonts.display, fontSize: 24, color: colors.text, letterSpacing: 0.5 },
   modalLabel: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.textSec, marginBottom: 6 },
   modalInput: {
-    backgroundColor: colors.surface, borderRadius: 14,
+    backgroundColor: colors.card, borderRadius: 18,
     paddingHorizontal: 14, paddingVertical: 12,
     fontFamily: fonts.data, fontSize: 15, color: colors.text,
     marginBottom: 16, borderWidth: 1, borderColor: colors.border,
   },
   saveBtn: {
-    backgroundColor: colors.accent, borderRadius: 14,
+    backgroundColor: colors.accent, borderRadius: 18,
     paddingVertical: 15, alignItems: 'center', marginTop: 4,
   },
   saveBtnText: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.onAccent },
 
   histWrap: { marginTop: 18, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
   histHeading: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.text, marginBottom: 4 },
-  histHint: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, lineHeight: 16, marginBottom: 8 },
+  histHint: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, lineHeight: 16, marginBottom: 8 },
   histScroll: { maxHeight: 180 },
-  histSubhead: { fontFamily: fonts.dataSemiBold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },
+  histSubhead: { fontFamily: fonts.dataSemiBold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },
   histRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10,
   },
   histDate: { fontFamily: fonts.data, fontSize: 12, color: colors.textMuted, width: 92 },
   histVal: { fontFamily: fonts.dataSemiBold, fontSize: 13, color: colors.text, flex: 1 },
-});
+}));
 
-const sp = StyleSheet.create({
+const sp = themedStyles(() => ({
   row: {
     paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
@@ -854,22 +867,22 @@ const sp = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
   },
   name: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.text, marginRight: 8 },
-  meta: { fontFamily: fonts.data, fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  meta: { fontFamily: fonts.data, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   deltaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   deltaText: { fontFamily: fonts.dataSemiBold, fontSize: 12 },
   history: {
-    backgroundColor: colors.bg, borderRadius: 10, padding: 10,
+    backgroundColor: colors.bg, borderRadius: 14, padding: 10,
     marginBottom: 8, gap: 10,
   },
   historyTitle: {
-    fontFamily: fonts.dataSemiBold, fontSize: 10, color: colors.textMuted,
+    fontFamily: fonts.dataSemiBold, fontSize: 11, color: colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2,
   },
   historySession: { gap: 4 },
-  historyDate: { fontFamily: fonts.dataSemiBold, fontSize: 11, color: colors.accentLight, marginBottom: 2 },
+  historyDate: { fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.accentLight, marginBottom: 2 },
   historySetRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  historySetNum: { fontFamily: fonts.data, fontSize: 11, color: colors.textMuted, width: 36 },
+  historySetNum: { fontFamily: fonts.data, fontSize: 12, color: colors.textMuted, width: 36 },
   historySetVal: { fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.text, flex: 1 },
   feelPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  feelPillText: { fontFamily: fonts.bodyBold, fontSize: 10 },
-});
+  feelPillText: { fontFamily: fonts.bodyBold, fontSize: 11 },
+}));

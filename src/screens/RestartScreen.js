@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-} from 'react-native';
+  View, Text, ScrollView, TouchableOpacity, } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme/colors';
+import { themedStyles } from '../theme/themed';
 import { fonts } from '../theme/fonts';
 import { toLocalDateKey, fromLocalDateKey, daysBetweenLocalDateKeys } from '../utils/date';
 import { weeksAway, detrainingFactor, RESTART_MODES } from '../utils/progression';
@@ -176,7 +176,7 @@ export default function RestartScreen({ navigation }) {
   );
 }
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
   topBar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 8 },
   closeBtn: {
@@ -191,11 +191,11 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
   heroTitle: {
-    fontFamily: fonts.display, fontSize: 44, color: colors.text,
+    fontFamily: fonts.display, fontSize: 32, color: colors.text,
     letterSpacing: 2, lineHeight: 46,
   },
   heroSub: {
-    fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textSec,
+    fontFamily: fonts.body, fontSize: 14, color: colors.textSec,
     textAlign: 'center', marginTop: 6, lineHeight: 20, paddingHorizontal: 10,
   },
 
@@ -217,7 +217,7 @@ const s = StyleSheet.create({
   },
   chartFill: { width: '100%', borderRadius: 8 },
   chartPct: { fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.text, marginTop: 6 },
-  chartLabel: { fontFamily: fonts.dataMedium, fontSize: 10, color: colors.textMuted, marginTop: 1 },
+  chartLabel: { fontFamily: fonts.dataMedium, fontSize: 11, color: colors.textMuted, marginTop: 1 },
 
   sectionLabel: {
     fontFamily: fonts.dataSemiBold, fontSize: 12, color: colors.textSec,
@@ -225,7 +225,7 @@ const s = StyleSheet.create({
   },
   modeCard: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 8,
+    backgroundColor: colors.card, borderRadius: 18, padding: 14, marginBottom: 8,
     borderWidth: 1, borderColor: colors.border,
   },
   modeCardActive: { borderColor: colors.accent, backgroundColor: colors.accentDim },
@@ -247,7 +247,7 @@ const s = StyleSheet.create({
   keepTitle: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.text, marginBottom: 10 },
   keepRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   keepText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.textSec, flex: 1 },
-  keepNote: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
+  keepNote: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, lineHeight: 16, marginTop: 4 },
 
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -256,4 +256,4 @@ const s = StyleSheet.create({
   primaryBtnText: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.onAccent },
   secondaryBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 14, marginTop: 4 },
   secondaryBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.textMuted },
-});
+}));
