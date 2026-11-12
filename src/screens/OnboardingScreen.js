@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { generateWorkoutPlan } from '../utils/workoutGenerator';
 import { colors } from '../theme/colors';
+import { themedStyles } from '../theme/themed';
 
 const TOTAL_STEPS = 6;
 
@@ -221,7 +221,7 @@ export default function OnboardingScreen() {
             <Ionicons name="chevron-back" size={20} color={colors.textSec} />
           </TouchableOpacity>
         ) : (
-          <View style={s.backBtn} />
+          <View style={{ width: 44 }} />
         )}
         <TouchableOpacity
           style={[s.nextBtn, !validateStep() && s.nextBtnDisabled]}
@@ -527,7 +527,7 @@ function SelectChip({ label, icon, selected, onPress }) {
 
 /* ─── Styles ─────────────────────────────────────────────────────── */
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
 
   progressRow: {
@@ -542,8 +542,8 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.border,
   },
-  progressDotActive: { backgroundColor: colors.accentDim },
-  progressDotDone: { backgroundColor: colors.accentLight },
+  progressDotActive: { backgroundColor: colors.accent },
+  progressDotDone: { backgroundColor: colors.accent },
 
   stepHeader: {
     paddingHorizontal: 20,
@@ -573,7 +573,7 @@ const s = StyleSheet.create({
 
   input: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 13,
     fontSize: 15,
@@ -588,14 +588,14 @@ const s = StyleSheet.create({
 
   bmiCard: {
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 18,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  bmiLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
+  bmiLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
   bmiValue: { fontSize: 36, fontWeight: '800', marginTop: 4 },
   bmiCat: { fontSize: 14, fontWeight: '600', marginTop: 2 },
 
@@ -610,7 +610,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
@@ -627,7 +627,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
@@ -663,7 +663,7 @@ const s = StyleSheet.create({
     width: '30%',
     minWidth: 90,
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 18,
     padding: 14,
     alignItems: 'center',
     borderWidth: 1,
@@ -673,7 +673,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.accent,
     borderColor: colors.accent,
   },
-  goalChipText: { fontSize: 11, color: colors.textSec, fontWeight: '600', textAlign: 'center' },
+  goalChipText: { fontSize: 12, color: colors.textSec, fontWeight: '600', textAlign: 'center' },
   goalChipTextActive: { color: colors.onAccent },
   primaryBadge: {
     position: 'absolute',
@@ -684,13 +684,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
   },
-  primaryBadgeText: { fontSize: 8, color: colors.white, fontWeight: '700' },
+  primaryBadgeText: { fontSize: 9, color: colors.white, fontWeight: '700' },
 
   infoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: colors.info + '15',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 12,
     borderWidth: 1,
     borderColor: colors.info + '40',
@@ -700,7 +700,7 @@ const s = StyleSheet.create({
   numChip: {
     width: 52,
     height: 52,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.card,
@@ -731,7 +731,7 @@ const s = StyleSheet.create({
 
   scheduleInfo: {
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: 14,
     padding: 12,
     marginTop: 4,
     marginBottom: 4,
@@ -753,7 +753,7 @@ const s = StyleSheet.create({
   backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
@@ -766,10 +766,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accent,
-    borderRadius: 14,
+    borderRadius: 18,
     paddingVertical: 14,
     gap: 4,
   },
   nextBtnDisabled: { opacity: 0.45 },
   nextBtnText: { fontSize: 15, color: colors.onAccent, fontWeight: '700' },
-});
+}));

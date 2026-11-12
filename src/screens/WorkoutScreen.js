@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { POSTURE_EXERCISES } from '../data/workoutData';
 import { colors } from '../theme/colors';
+import { themedStyles, themed } from '../theme/themed';
 import { toLocalDateKey, fromLocalDateKey } from '../utils/date';
 import {
-  getProgramWeek, getProgressionModifier, applyProgression,
+  getWeekContext, applyProgression,
   isBandExercise, BAND_SWAPS,
 } from '../utils/progression';
-import { makeWorkoutExercise } from '../utils/workoutGenerator';
+import { makeWorkoutExercise, getPlanForDate } from '../utils/workoutGenerator';
+import { getActiveTrip } from '../utils/recovery';
 import { getDumbbellLadder, isTwoDumbbell, snapToLoad, nextLoadUp, nextLoadDown } from '../utils/equipment';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { getWorkoutSuggestions } from '../services/anthropicService';
@@ -66,7 +68,9 @@ export default function WorkoutScreen({ route }) {
     undoFn?.();
   }
 
-  const { generatedPlan, progress, userProfile } = state;
+  const { progress, userProfile } = state;
+  // During a trip this is the short travel plan; otherwise the normal plan.
+  const generatedPlan = getPlanForDate(state, toLocalDateKey());
   const todayKey = getTodayKey();
   const todayWorkoutId = generatedPlan?.schedule?.[todayKey] ?? null;
   const todayWorkout = todayWorkoutId ? generatedPlan?.workouts?.[todayWorkoutId] : null;
@@ -91,7 +95,9 @@ export default function WorkoutScreen({ route }) {
       <View style={s.header}>
         <Text style={s.title}>Workouts</Text>
         <Text style={s.subtitle}>
-          {totalDays > 0 ? `${totalDays}-day split` : 'No plan yet'} · personalised for {userProfile.name || 'you'}
+          {generatedPlan?.isTravel
+            ? `Travel mode · ${totalDays} short sessions a week`
+            : `${totalDays > 0 ? `${totalDays}-day split` : 'No plan yet'} · personalised for ${userProfile.name || 'you'}`}
         </Text>
       </View>
 
@@ -168,13 +174,15 @@ function makeEmptySets(exercise, setLogs, today) {
   });
 }
 
-const PHASE_COLORS = {
+const PHASE_COLORS = themed(() => ({
   'Foundation': colors.info,
   'Build':      colors.accent,
   'Strength':   colors.secondary,
   'Complete':   colors.warning,
   'Deload':     colors.success,
-};
+  'Consolidate': colors.info,
+  'Travel':     colors.warning,
+}));
 
 function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, completedWorkouts, onInfo, onSetSaved, onGoToPosture }) {
   const { state, dispatch } = useApp();
@@ -186,14 +194,16 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   const today = toLocalDateKey();
   const isDone = completedWorkouts.some(w => w.date === today);
 
-  const restart = state.restart;
-  const swaps = state.swaps || {};
   const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
 
   // The 12-week programme restarts at week 1 from the restart date, so a long
-  // layoff doesn't leave you mid-cycle (or on a phantom deload week).
-  const programWeek = getProgramWeek(completedWorkouts, restart?.date);
-  const mod = getProgressionModifier(programWeek);
+  // layoff doesn't leave you mid-cycle (or on a phantom deload week). Trip days
+  // are paused, and deloads are adaptive unless the user chose fixed ones.
+  // `restart` here is the load ease in force — a programme restart, or the
+  // milder one applied when you come home from a trip.
+  const { programWeek, mod, loadEase: restart } = getWeekContext(state, today);
+  // Swaps point at dumbbell alternatives, which you won't have while travelling.
+  const swaps = mod.isTravel ? {} : (state.swaps || {});
 
   // "Ramp" = the eased-in block right after a restart, until a full session has
   // been completed on/after the restart date. Keyed on completed workouts (not
@@ -281,15 +291,20 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
   }
 
   if (!workout) {
+    const travelling = !!getActiveTrip(state.trips, today);
     return (
       <View style={s.restContainer}>
-        <Text style={{ fontSize: 48 }}>😴</Text>
-        <Text style={s.restTitle}>Rest Day</Text>
-        <Text style={s.restSubtitle}>{dayName} · Muscle growth happens during recovery</Text>
+        <Text style={{ fontSize: 48 }}>{travelling ? '🧳' : '😴'}</Text>
+        <Text style={s.restTitle}>{travelling ? 'Travel Rest Day' : 'Rest Day'}</Text>
+        <Text style={s.restSubtitle}>
+          {dayName} · {travelling ? 'Programme paused while you\'re away' : 'Muscle growth happens during recovery'}
+        </Text>
         <View style={s.restTip}>
           <Ionicons name="information-circle-outline" size={16} color={colors.info} style={{ marginRight: 8 }} />
           <Text style={s.restTipText}>
-            Use today for a 10-min walk, light stretching, or the Posture Guide routine. Recovery is part of the programme.
+            {travelling
+              ? 'Aim for 8–10k steps today — walking is the easiest way to stay on track while away. Enjoy the trip.'
+              : 'Use today for a 10-min walk, light stretching, or the Posture Guide routine. Recovery is part of the programme.'}
           </Text>
         </View>
         <TouchableOpacity style={[s.postureLinkBanner, { width: '100%', marginTop: 16 }]} onPress={onGoToPosture} activeOpacity={0.8}>
@@ -308,7 +323,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
 
   return (
     <View style={{ paddingHorizontal: 16 }}>
-      <View style={[s.workoutHeader, { borderLeftColor: workout.color }]}>
+      <View style={[s.workoutHeader, { borderTopColor: workout.color }]}>
         <View style={{ flex: 1 }}>
           <Text style={s.workoutDay}>{dayName}</Text>
           <Text style={s.workoutName}>{workout.name}</Text>
@@ -339,10 +354,10 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
             <Ionicons name="refresh" size={13} color={colors.onAccent} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.restartTitle}>Easing back in</Text>
+            <Text style={s.restartTitle}>{restart?.mode === 'travel' ? 'Welcome home' : 'Easing back in'}</Text>
             <Text style={s.restartSub}>
-              Loads set ~{Math.round((1 - (restart?.factor ?? 1)) * 100)}% lighter after {restart?.weeksOff ?? 0} week
-              {(restart?.weeksOff ?? 0) === 1 ? '' : 's'} off. Hit these clean and they climb back fast.
+              Loads set ~{Math.round((1 - (restart?.factor ?? 1)) * 100)}% lighter after {restart?.mode === 'travel' ? 'your trip' : `${restart?.weeksOff ?? 0} week${(restart?.weeksOff ?? 0) === 1 ? '' : 's'} off`}.
+              {' '}Hit these clean and they climb back fast.
             </Text>
           </View>
         </View>
@@ -350,7 +365,9 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
 
       <View style={[s.progressionBanner, { borderColor: (PHASE_COLORS[mod.label] || colors.accent) + '50' }]}>
         <View style={s.progressionLeft}>
-          <Text style={s.progressionWeek}>Week {Math.min(programWeek, 12)} of 12</Text>
+          <Text style={s.progressionWeek}>
+            {mod.isTravel ? `Paused at week ${Math.min(programWeek, 12)}` : `Week ${Math.min(programWeek, 12)} of 12`}
+          </Text>
           <View style={[s.progressionPill, { backgroundColor: (PHASE_COLORS[mod.label] || colors.accent) + '22' }]}>
             <Text style={[s.progressionPillText, { color: PHASE_COLORS[mod.label] || colors.accent }]}>{mod.label}</Text>
           </View>
@@ -376,7 +393,7 @@ function TodayTab({ workout, dayName, expandedId, setExpandedId, onComplete, com
         // Offer the dumbbell swap unless its target is already in today's session.
         const swapCandidate = BAND_SWAPS[orig.id];
         const swapCollision = swapCandidate && workout.exercises.some(e => e.id === swapCandidate);
-        const swapToId = ex.swappedFrom || swapCollision ? null : swapCandidate;
+        const swapToId = mod.isTravel || ex.swappedFrom || swapCollision ? null : swapCandidate;
         return (
           <ExerciseCard
             key={orig.id}
@@ -591,7 +608,7 @@ function DetailRow({ icon, label, value }) {
 
 function WeeklyTab({ generatedPlan, completedWorkouts }) {
   const { state } = useApp();
-  const swaps = state.swaps || {};
+  const swaps = generatedPlan?.isTravel ? {} : (state.swaps || {});
   const primaryGoal = state.userProfile?.goals?.[0] || 'general_fitness';
   const todayKey = getTodayKey();
   const [expandedDay, setExpandedDay] = React.useState(null);
@@ -633,7 +650,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
       <View style={s.weekLegend}>
         {[
           { color: colors.success, label: 'Done' },
-          { color: colors.info, label: 'Upcoming' },
+          { color: colors.accent, label: 'Upcoming' },
           { color: colors.textMuted, label: 'Rest' },
         ].map(({ color, label }) => (
           <View key={label} style={s.weekLegendItem}>
@@ -654,7 +671,7 @@ function WeeklyTab({ generatedPlan, completedWorkouts }) {
         const isExpanded = expandedDay === day;
         const dayDate = weekDates[day];
         const isCompleted = completedWorkouts.some(w => w.date === dayDate);
-        const dotColor = !workout ? colors.textMuted : isCompleted ? colors.success : colors.info;
+        const dotColor = !workout ? colors.textMuted : isCompleted ? colors.success : colors.accent;
 
         return (
           <TouchableOpacity
@@ -827,11 +844,11 @@ function ExerciseInfoModal({ exercise, onClose }) {
 /* ─── Set Logger ─────────────────────────────────────────────────── */
 
 // Outcome of an auto-rated set (derived from reps, no manual input).
-const OUTCOME = {
+const OUTCOME = themed(() => ({
   easy: { label: 'Topped it', color: colors.success, icon: 'arrow-up' },
   good: { label: 'On target', color: colors.info, icon: 'checkmark' },
   hard: { label: 'Tough',     color: colors.secondary, icon: 'arrow-down' },
-};
+}));
 
 function parseRepRange(reps) {
   const matches = String(reps || '').match(/\d+/g)?.map(Number) || [];
@@ -1068,7 +1085,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
 
       {/* Suggestion banner — band / deload / restart take priority over AI */}
       {isBand ? (
-        <View style={[sl.aiBanner, { borderColor: colors.info + '40' }]}>
+        <View style={[sl.aiBanner, { backgroundColor: colors.infoDim }]}>
           <Ionicons name="pulse" size={13} color={colors.info} />
           <Text style={sl.aiBannerText}>
             <Text style={[sl.aiBannerStrong, { color: colors.info }]}>Bands progress by reps, not kg.</Text>
@@ -1076,18 +1093,20 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
           </Text>
         </View>
       ) : isDeload ? (
-        <View style={sl.aiBanner}>
+        <View style={[sl.aiBanner, { backgroundColor: colors.successDim }]}>
           <Ionicons name="leaf" size={13} color={colors.success} />
           <Text style={sl.aiBannerText}>
-            <Text style={[sl.aiBannerStrong, { color: colors.success }]}>Deload week — recover.</Text>
+            <Text style={[sl.aiBannerStrong, { color: colors.success }]}>Recovery week — go lighter.</Text>
             {' '}Suggested weights eased ~40%. Keep it light and clean.
           </Text>
         </View>
       ) : restartActive ? (
-        <View style={[sl.aiBanner, { borderColor: colors.accent + '55' }]}>
+        <View style={sl.aiBanner}>
           <Ionicons name="refresh" size={13} color={colors.accentLight} />
           <Text style={sl.aiBannerText}>
-            <Text style={sl.aiBannerStrong}>Back after a break — starting ~{easePct}% lighter.</Text>
+            <Text style={sl.aiBannerStrong}>
+              {restart?.mode === 'travel' ? 'Back from your trip' : 'Back after a break'} — starting ~{easePct}% lighter.
+            </Text>
             {' '}Build up from here; it comes back quickly.
           </Text>
         </View>
@@ -1105,7 +1124,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
           </Text>
         </View>
       ) : aiError ? (
-        <View style={[sl.aiBanner, { borderColor: colors.secondary + '55' }]}>
+        <View style={[sl.aiBanner, { backgroundColor: colors.secondaryDim }]}>
           <Ionicons name="alert-circle-outline" size={13} color={colors.secondary} />
           <Text style={sl.aiBannerText}>
             <Text style={[sl.aiBannerStrong, { color: colors.secondary }]}>AI coach unavailable.</Text>
@@ -1203,7 +1222,7 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
               </View>
             ) : isAmrap ? (
               <View style={[sl.colFeel, sl.outcomeWrap]}>
-                <Text style={sl.maxHint}>MAX SET</Text>
+                <Text style={sl.maxHint} numberOfLines={1}>MAX</Text>
               </View>
             ) : (
               <View style={sl.colFeel} />
@@ -1216,8 +1235,8 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
             >
               <Ionicons
                 name={set.saved ? 'pencil' : 'checkmark'}
-                size={14}
-                color={set.saved ? colors.textMuted : '#fff'}
+                size={18}
+                color={set.saved ? colors.textMuted : colors.onAccent}
               />
             </TouchableOpacity>
           </View>
@@ -1248,20 +1267,19 @@ function SetLogger({ exercise, accentColor, sets, onSetsChange, isDeload, onSetS
 
 /* ─── Styles ─────────────────────────────────────────────────────── */
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 28, color: colors.text, fontWeight: '700' },
-  subtitle: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  header: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
+  title: { fontSize: 28, color: colors.text, fontWeight: '700', letterSpacing: -0.3 },
+  subtitle: { fontSize: 14, color: colors.textSec, marginTop: 3 },
   tabBar: {
-    flexDirection: 'row', marginHorizontal: 16, marginBottom: 8,
-    backgroundColor: colors.surface, borderRadius: 12, padding: 4,
-    borderWidth: 1, borderColor: colors.border,
+    flexDirection: 'row', marginHorizontal: 16, marginBottom: 10,
+    backgroundColor: colors.card, borderRadius: 999, padding: 4,
   },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.accent },
-  tabText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  tabTextActive: { color: colors.onAccent },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: 999, alignItems: 'center' },
+  tabActive: { backgroundColor: colors.card, elevation: 2, shadowColor: colors.shadow, shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
+  tabText: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
+  tabTextActive: { color: colors.text, fontWeight: '700' },
   scroll: { flex: 1 },
 
   restContainer: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
@@ -1269,30 +1287,30 @@ const s = StyleSheet.create({
   restSubtitle: { fontSize: 14, color: colors.textSec, marginTop: 6, textAlign: 'center' },
   restTip: {
     flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: colors.card, borderRadius: 12, padding: 14, marginTop: 24,
+    backgroundColor: colors.card, borderRadius: 16, padding: 14, marginTop: 24,
     borderWidth: 1, borderColor: colors.border,
   },
   restTipText: { flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 20 },
 
   workoutHeader: {
-    backgroundColor: colors.card, borderRadius: 14, padding: 16,
-    marginTop: 8, marginBottom: 12, flexDirection: 'row',
+    backgroundColor: colors.card, borderRadius: 22, padding: 18,
+    marginTop: 6, marginBottom: 12, flexDirection: 'row',
     justifyContent: 'space-between', alignItems: 'flex-start',
-    borderLeftWidth: 4, borderWidth: 1, borderColor: colors.border,
+    borderTopWidth: 5, borderWidth: 1, borderColor: colors.border,
   },
-  workoutDay: { fontSize: 12, color: colors.textSec, fontWeight: '500' },
-  workoutName: { fontSize: 20, color: colors.text, fontWeight: '700', marginTop: 2 },
-  workoutFocus: { fontSize: 13, color: colors.textSec, marginTop: 2 },
+  workoutDay: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
+  workoutName: { fontSize: 22, color: colors.text, fontWeight: '700', marginTop: 2, letterSpacing: -0.2 },
+  workoutFocus: { fontSize: 14, color: colors.textSec, marginTop: 3 },
   durationBadge: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 4,
+    backgroundColor: colors.card, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, gap: 4,
   },
-  durationText: { fontSize: 11, color: colors.textSec },
+  durationText: { fontSize: 12, color: colors.textSec },
 
-  postureBlock: { borderRadius: 14, borderWidth: 1, marginBottom: 14, overflow: 'hidden' },
+  postureBlock: { borderRadius: 18, borderWidth: 1, marginBottom: 14, overflow: 'hidden' },
   postureBlockHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
   postureBlockTitle: { fontSize: 13, fontWeight: '700' },
-  postureBlockSubtitle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  postureBlockSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   postureItem: {
     flexDirection: 'row', alignItems: 'flex-start',
     paddingHorizontal: 12, paddingVertical: 10,
@@ -1301,7 +1319,7 @@ const s = StyleSheet.create({
   postureItemIcon: { fontSize: 20, width: 28, textAlign: 'center', marginTop: 1 },
   postureItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1, marginRight: 6 },
   postureItemName: { fontSize: 13, color: colors.text, fontWeight: '600', flex: 1 },
-  postureItemReps: { fontSize: 11, color: colors.textSec, marginLeft: 8 },
+  postureItemReps: { fontSize: 12, color: colors.textSec, marginLeft: 8 },
   postureItemBenefit: { fontSize: 12, color: colors.textSec, lineHeight: 18, marginTop: 4 },
 
   sectionLabel: {
@@ -1313,15 +1331,15 @@ const s = StyleSheet.create({
   exProgress: {
     marginBottom: 10, gap: 6,
   },
-  exProgressText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+  exProgressText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
   exProgressTrack: {
-    height: 4, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden',
+    height: 8, backgroundColor: colors.ring1Soft, borderRadius: 4, overflow: 'hidden',
   },
   exProgressFill: {
-    height: 4, backgroundColor: colors.success, borderRadius: 2,
+    height: 8, backgroundColor: colors.ring1, borderRadius: 4,
   },
   exCard: {
-    backgroundColor: colors.card, borderRadius: 14, marginBottom: 8,
+    backgroundColor: colors.card, borderRadius: 18, marginBottom: 8,
     overflow: 'hidden', borderWidth: 1, borderColor: colors.border,
   },
   exCardTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 8 },
@@ -1331,13 +1349,13 @@ const s = StyleSheet.create({
   exName: { fontSize: 14, color: colors.text, fontWeight: '600', marginBottom: 6 },
   exMeta: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   chip: { backgroundColor: colors.surface, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  chipText: { fontSize: 10, color: colors.textSec, fontWeight: '500' },
+  chipText: { fontSize: 11, color: colors.textSec, fontWeight: '500' },
   exDetails: {
     paddingHorizontal: 14, paddingBottom: 14,
     borderTopWidth: 1, borderTopColor: colors.border, gap: 8, paddingTop: 10,
   },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  detailLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
+  detailLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
   detailValue: { fontSize: 13, color: colors.textSec, lineHeight: 19 },
   postureNote: {
     backgroundColor: colors.accentDim + '55', borderRadius: 8, padding: 10,
@@ -1347,7 +1365,7 @@ const s = StyleSheet.create({
 
   restartBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: colors.accentDim, borderRadius: 12, padding: 12,
+    backgroundColor: colors.accentDim, borderRadius: 16, padding: 12,
     marginBottom: 10, borderWidth: 1, borderColor: colors.accent + '55',
   },
   restartBadge: {
@@ -1355,7 +1373,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   restartTitle: { fontSize: 13, color: colors.accentLight, fontWeight: '800' },
-  restartSub: { fontSize: 11, color: colors.textSec, lineHeight: 16, marginTop: 1 },
+  restartSub: { fontSize: 12, color: colors.textSec, lineHeight: 16, marginTop: 1 },
 
   exNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' },
   swapTag: {
@@ -1363,28 +1381,28 @@ const s = StyleSheet.create({
     backgroundColor: colors.info + '18', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2,
     borderWidth: 1, borderColor: colors.info + '40',
   },
-  swapTagText: { fontSize: 8, color: colors.info, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+  swapTagText: { fontSize: 9, color: colors.info, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
   swapBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.info + '14', borderRadius: 10, paddingVertical: 11,
+    backgroundColor: colors.info + '14', borderRadius: 14, paddingVertical: 11,
     borderWidth: 1, borderColor: colors.info + '40',
   },
   swapBtnText: { fontSize: 12, color: colors.info, fontWeight: '700' },
 
   progressionBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.card, borderRadius: 12, padding: 12,
+    backgroundColor: colors.card, borderRadius: 16, padding: 12,
     marginBottom: 12, borderWidth: 1,
   },
   progressionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   progressionWeek: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
   progressionPill: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  progressionPillText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-  progressionPhase: { fontSize: 11, color: colors.textMuted, flexShrink: 1, textAlign: 'right', maxWidth: '55%' },
+  progressionPillText: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  progressionPhase: { fontSize: 12, color: colors.textMuted, flexShrink: 1, textAlign: 'right', maxWidth: '55%' },
 
   completeBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 16,
+    backgroundColor: colors.accent, borderRadius: 999, paddingVertical: 16,
     marginTop: 16, marginBottom: 8, gap: 8,
   },
   completeBtnDone: { backgroundColor: colors.success },
@@ -1395,20 +1413,20 @@ const s = StyleSheet.create({
   },
   toastRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.cardHigh, borderRadius: 14,
+    backgroundColor: colors.isDark ? colors.cardHigh : '#2B2F36', borderRadius: 16,
     paddingLeft: 16, paddingRight: 6, paddingVertical: 12,
     borderWidth: 1, borderColor: colors.border,
     elevation: 8,
     shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
   },
-  toastText: { flex: 1, fontSize: 13, color: colors.text, fontWeight: '500' },
+  toastText: { flex: 1, fontSize: 14, color: '#F1F3F6', fontWeight: '500' },
   toastUndoBtn: {
-    backgroundColor: colors.accent, borderRadius: 10,
+    backgroundColor: 'transparent', borderRadius: 999,
     paddingHorizontal: 12, paddingVertical: 8, marginLeft: 10,
   },
-  toastUndoText: { fontSize: 12, color: colors.onAccent, fontWeight: '700' },
+  toastUndoText: { fontSize: 14, color: '#A9C4FB', fontWeight: '700' },
   weekBanner: {
-    backgroundColor: colors.card, borderRadius: 12, padding: 14,
+    backgroundColor: colors.card, borderRadius: 16, padding: 14,
     marginTop: 8, marginBottom: 10, borderWidth: 1, borderColor: colors.border,
   },
   weekBannerText: { fontSize: 13, color: colors.textSec, lineHeight: 20 },
@@ -1418,10 +1436,10 @@ const s = StyleSheet.create({
   },
   weekLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   weekLegendDot: { width: 8, height: 8, borderRadius: 4 },
-  weekLegendLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
+  weekLegendLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
   postureLinkBanner: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.card, borderRadius: 14,
+    backgroundColor: colors.card, borderRadius: 18,
     padding: 14, marginTop: 12, marginBottom: 8, gap: 12,
     borderWidth: 1, borderColor: colors.border,
   },
@@ -1431,54 +1449,54 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   postureLinkTitle: { fontSize: 14, color: colors.text, fontWeight: '700', marginBottom: 2 },
-  postureLinkSub: { fontSize: 11, color: colors.textSec, lineHeight: 16 },
+  postureLinkSub: { fontSize: 12, color: colors.textSec, lineHeight: 16 },
   weekRow: {
     flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: colors.card, borderRadius: 12, padding: 14,
+    backgroundColor: colors.card, borderRadius: 16, padding: 14,
     marginBottom: 8, borderWidth: 1, borderColor: colors.border, gap: 12,
   },
   weekDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   weekRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
   weekDay: { fontSize: 13, color: colors.text, fontWeight: '700' },
   weekWorkout: { fontSize: 12, color: colors.textSec, marginTop: 2 },
-  weekPosture: { fontSize: 11, color: colors.accentLight, marginTop: 3, fontStyle: 'italic' },
+  weekPosture: { fontSize: 12, color: colors.accentLight, marginTop: 3, fontStyle: 'italic' },
   todayBadge: { backgroundColor: colors.accentDim, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-  todayBadgeText: { fontSize: 10, color: colors.accentLight, fontWeight: '700' },
+  todayBadgeText: { fontSize: 11, color: colors.accentLight, fontWeight: '700' },
   weekExList: { marginTop: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 },
   weekExRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border + '60' },
   weekExName: { fontSize: 13, color: colors.text, fontWeight: '600' },
-  weekExMeta: { fontSize: 11, color: colors.textSec, marginTop: 2 },
-  weekExMuscles: { fontSize: 10, color: colors.textMuted, marginTop: 1, fontStyle: 'italic' },
+  weekExMeta: { fontSize: 12, color: colors.textSec, marginTop: 2 },
+  weekExMuscles: { fontSize: 11, color: colors.textMuted, marginTop: 1, fontStyle: 'italic' },
   tipCard: {
-    flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12,
+    flexDirection: 'row', backgroundColor: colors.card, borderRadius: 16,
     padding: 14, marginTop: 4, borderWidth: 1, borderColor: colors.border, alignItems: 'flex-start',
   },
   tipText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 19 },
 
   postureBanner: {
     flexDirection: 'row', backgroundColor: colors.warning + '18',
-    borderRadius: 12, padding: 14, marginTop: 8, marginBottom: 16,
+    borderRadius: 16, padding: 14, marginTop: 8, marginBottom: 16,
     borderWidth: 1, borderColor: colors.warning + '40', alignItems: 'flex-start',
   },
   postureBannerText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 19 },
   guideSection: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
   guideCard: {
-    backgroundColor: colors.card, borderRadius: 12, marginBottom: 8,
+    backgroundColor: colors.card, borderRadius: 16, marginBottom: 8,
     overflow: 'hidden', borderWidth: 1, borderColor: colors.border,
   },
   guideCardTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
   guideIcon: { fontSize: 22, width: 34, textAlign: 'center' },
   guideName: { fontSize: 14, color: colors.text, fontWeight: '600' },
-  guideMeta: { fontSize: 11, color: colors.textSec, marginTop: 2 },
+  guideMeta: { fontSize: 12, color: colors.textSec, marginTop: 2 },
   guideExpanded: { padding: 14, paddingTop: 0, gap: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: 14 },
   guideRow: { fontSize: 12, color: colors.textSec, lineHeight: 19 },
   guideRowLabel: { fontWeight: '700', color: colors.textSec },
-});
+}));
 
-const m = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
+const m = themedStyles(() => ({
+  overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     maxHeight: '85%', borderTopWidth: 1, borderColor: colors.border, paddingBottom: 16,
   },
   handle: { width: 36, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
@@ -1497,21 +1515,21 @@ const m = StyleSheet.create({
   stepText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 20 },
   mistake: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   mistakeText: { flex: 1, fontSize: 13, color: colors.textSec, lineHeight: 19 },
-  postureNote: { backgroundColor: colors.accentDim + '55', borderRadius: 10, padding: 12, borderLeftWidth: 3, borderLeftColor: colors.accentLight, marginTop: 12 },
+  postureNote: { backgroundColor: colors.accentDim + '55', borderRadius: 14, padding: 12, borderLeftWidth: 3, borderLeftColor: colors.accentLight, marginTop: 12 },
   postureNoteText: { fontSize: 12, color: colors.accentLight, lineHeight: 18 },
-});
+}));
 
-const sl = StyleSheet.create({
+const sl = themedStyles(() => ({
   container: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, marginTop: 8 },
   tableHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingHorizontal: 2 },
-  colLabel: { fontSize: 9, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  colLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingHorizontal: 2, gap: 6 },
   rowSaved: { opacity: 0.75 },
   colNum: { width: 30, alignItems: 'center', justifyContent: 'center' },
   colWeight: { flex: 2 },
   colReps: { flex: 1.4 },
   colFeel: { flex: 1.8, alignItems: 'center' },
-  colSave: { width: 30 },
+  colSave: { width: 38 },
   numCircle: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
@@ -1521,52 +1539,54 @@ const sl = StyleSheet.create({
   numText: { fontSize: 12, color: colors.textSec, fontWeight: '700' },
   numTextDone: { color: colors.success },
   inputBox: {
-    backgroundColor: colors.surface, borderRadius: 8,
-    paddingHorizontal: 6, paddingVertical: 8,
-    fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.border,
-    textAlign: 'center', fontWeight: '600', flex: 1,
+    backgroundColor: colors.surface, borderRadius: 12,
+    paddingHorizontal: 6, paddingVertical: 10,
+    fontSize: 16, color: colors.text, borderWidth: 1.5, borderColor: 'transparent',
+    textAlign: 'center', fontWeight: '600', flex: 1, flexBasis: 0, minWidth: 0, fontVariant: ['tabular-nums'],
   },
-  unitText: { fontSize: 10, color: colors.textMuted },
+  unitText: { fontSize: 11, color: colors.textMuted },
   bandTag: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: colors.info + '14', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7,
     borderWidth: 1, borderColor: colors.info + '33',
   },
-  bandTagText: { fontSize: 11, color: colors.info, fontWeight: '700' },
+  bandTagText: { fontSize: 12, color: colors.info, fontWeight: '700' },
   savedVal: { fontSize: 13, color: colors.success, fontWeight: '700', textAlign: 'center' },
-  saveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  saveBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   saveBtnDone: { backgroundColor: colors.success + '40' },
   editBtnSaved: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   outcomeWrap: { justifyContent: 'center' },
   outcomeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
-    borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1,
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1,
   },
-  outcomeText: { fontSize: 10, fontWeight: '700' },
-  maxHint: { fontSize: 9, color: colors.accentLight, fontWeight: '800', letterSpacing: 0.5 },
+  outcomeText: { fontSize: 11, fontWeight: '700' },
+  maxHint: {
+    fontSize: 11, color: colors.accentLight, fontWeight: '800', letterSpacing: 0.6,
+    backgroundColor: colors.accentDim, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, overflow: 'hidden',
+  },
   helpBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border,
   },
-  helpText: { flex: 1, fontSize: 11, color: colors.textMuted, lineHeight: 17 },
+  helpText: { flex: 1, fontSize: 12, color: colors.textMuted, lineHeight: 17 },
   helpStrong: { color: colors.accentLight, fontWeight: '700' },
   lastSession: {
-    backgroundColor: colors.surface, borderRadius: 10, padding: 10,
+    backgroundColor: colors.surface, borderRadius: 14, padding: 10,
     marginBottom: 12, borderWidth: 1, borderColor: colors.border,
   },
-  lastSessionTitle: { fontSize: 10, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  lastSessionTitle: { fontSize: 11, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   lastSessionRows: { gap: 4 },
   lastSessionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lastSessionSetNum: { fontSize: 11, color: colors.textMuted, width: 36 },
+  lastSessionSetNum: { fontSize: 12, color: colors.textMuted, width: 36 },
   lastSessionVal: { fontSize: 12, color: colors.textSec, fontWeight: '600', flex: 1 },
   lastSessionFeel: { fontSize: 12 },
   aiBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: colors.accentDim + '55', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10,
-    borderWidth: 1, borderColor: colors.accent + '40',
+    backgroundColor: colors.accentDim, borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
   },
   aiSpark: { fontSize: 13, color: colors.accentLight },
-  aiBannerText: { flex: 1, fontSize: 11, color: colors.textSec, lineHeight: 16 },
+  aiBannerText: { flex: 1, fontSize: 12, color: colors.textSec, lineHeight: 16 },
   aiBannerStrong: { color: colors.accentLight, fontWeight: '700' },
-});
+}));

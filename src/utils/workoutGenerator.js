@@ -1,15 +1,17 @@
 import { EXERCISES, POSTURE_WARMUPS, POSTURE_COOLDOWNS } from '../data/exerciseLibrary';
+import { getActiveTrip } from './recovery';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const COLORS = {
-  push:  '#EA580C',   // brand orange
-  pull:  '#3B82F6',
-  legs:  '#10B981',
-  full:  '#F43F5E',
-  core:  '#FBBF24',   // amber (distinct from orange)
-  upper: '#FB923C',   // lighter orange
-  lower: '#06B6D4',
+  push:  '#E8710A',   // orange
+  pull:  '#2F6BEA',   // blue
+  legs:  '#00A693',   // teal
+  full:  '#D63F76',   // raspberry
+  core:  '#D99A06',   // amber
+  upper: '#F08A24',   // light orange
+  lower: '#1297BF',   // cyan
+  travel: '#C27C0E',  // travel amber
 };
 
 // Priority-ordered exercise IDs per workout slot
@@ -72,6 +74,25 @@ const FULL_SLOTS = [
   ['plank', 'dead_bug'],
   ['db_shoulder_press', 'lateral_raise', 'pike_push_up'],
 ];
+
+// travel = one full-body session repeated 2–3x a week while away. Ordered so a
+// bodyweight-only kit still covers squat, hinge, push, pull, lunge and core.
+const TRAVEL_SLOTS = [
+  ['bodyweight_squat'],
+  ['push_up', 'incline_push_up'],
+  ['band_row', 'inverted_row'],
+  ['reverse_lunge'],
+  ['glute_bridge'],
+  ['pike_push_up', 'band_pull_apart', 'superman'],
+  ['plank', 'dead_bug'],
+];
+
+// Training days for each travel frequency — spread out so there's always a
+// rest day between sessions.
+const TRAVEL_DAYS = {
+  2: ['Tuesday', 'Friday'],
+  3: ['Monday', 'Wednesday', 'Friday'],
+};
 
 function canDo(exerciseId, equipment) {
   const ex = EXERCISES[exerciseId];
@@ -183,6 +204,12 @@ function buildWorkout(type, equipment, fitnessLevel, primaryGoal, jobType) {
       focus = 'Quads · Hamstrings · Glutes · Core';
       warmupKey = 'legs'; cooldownKey = 'legs';
       break;
+    case 'travel':
+      slots = TRAVEL_SLOTS;
+      name = 'Travel Workout';
+      focus = 'Full body · no gym needed';
+      warmupKey = 'full'; cooldownKey = 'full';
+      break;
     case 'full':
     default:
       slots = FULL_SLOTS;
@@ -268,4 +295,59 @@ export function generateWorkoutPlan(userProfile) {
       ? [`Only ${availableTrainingDays.length} training days are available after selected rest days.`]
       : [],
   };
+}
+
+// Plan used while travel mode is active. kit: 'bodyweight' | 'band' | 'gym'.
+// 'gym' keeps the normal plan — only the programme week pauses.
+export function generateTravelPlan(userProfile, trip) {
+  if (!trip || trip.kit === 'gym') return null;
+  const equipment = trip.kit === 'band' ? ['resistance_band'] : [];
+  const days = TRAVEL_DAYS[trip.daysPerWeek] || TRAVEL_DAYS[3];
+  const {
+    fitnessLevel = 'beginner',
+    goals = ['general_fitness'],
+    jobType = 'desk',
+  } = userProfile || {};
+  const workout = buildWorkout('travel', equipment, fitnessLevel, goals[0] || 'general_fitness', jobType);
+  // Keep sessions short: 3 sets max, and the shorter posture blocks.
+  workout.exercises = workout.exercises.map(ex => ({ ...ex, sets: Math.min(ex.sets, 3) }));
+  workout.duration = '20-30 min';
+  workout.postureWarmup = workout.postureWarmup.slice(0, 1);
+  workout.postureCooldown = workout.postureCooldown.slice(0, 1);
+
+  const schedule = {};
+  ALL_DAYS.forEach(d => { schedule[d] = days.includes(d) ? 'travel' : null; });
+  return {
+    schedule,
+    workouts: { travel: workout },
+    generatedAt: Date.now(),
+    requestedDays: days.length,
+    actualTrainingDays: days.length,
+    restDays: ALL_DAYS.filter(d => !days.includes(d)),
+    warnings: [],
+    isTravel: true,
+  };
+}
+
+// The plan that applies on a given date: the travel plan during a trip,
+// otherwise the user's normal plan.
+export function getPlanForDate(state, dateKey) {
+  const trip = getActiveTrip(state.trips, dateKey);
+  if (trip) return generateTravelPlan(state.userProfile, trip) || withCurrentColors(state.generatedPlan);
+  return withCurrentColors(state.generatedPlan);
+}
+
+// Saved plans carry the colour they were generated with; repaint them with the
+// current palette so a redesign doesn't need a "Regenerate plan" tap.
+const repainted = new WeakMap();
+function withCurrentColors(plan) {
+  if (!plan?.workouts) return plan;
+  if (repainted.has(plan)) return repainted.get(plan);
+  const workouts = {};
+  Object.entries(plan.workouts).forEach(([id, w]) => {
+    workouts[id] = COLORS[id] ? { ...w, color: COLORS[id] } : w;
+  });
+  const next = { ...plan, workouts };
+  repainted.set(plan, next);
+  return next;
 }

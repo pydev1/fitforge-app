@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
   ScrollView,
   Image,
   ActivityIndicator,
@@ -16,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { analyzePhoto } from '../services/anthropicService';
 import { colors } from '../theme/colors';
+import { themedStyles } from '../theme/themed';
 
 const { width } = Dimensions.get('window');
 
@@ -214,7 +214,7 @@ const TIPS = [
   { icon: '🪑', head: 'Your desk setup', text: 'Photo of your workstation to get specific posture correction advice for your environment.' },
 ];
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
@@ -225,7 +225,7 @@ const s = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
     backgroundColor: colors.info + '18',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 12,
     borderWidth: 1,
     borderColor: colors.info + '35',
@@ -246,7 +246,7 @@ const s = StyleSheet.create({
     top: 10,
     right: 10,
     backgroundColor: colors.bg,
-    borderRadius: 14,
+    borderRadius: 18,
   },
   placeholder: {
     marginHorizontal: 16,
@@ -273,7 +273,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accent,
-    borderRadius: 14,
+    borderRadius: 18,
     paddingVertical: 14,
     gap: 8,
   },
@@ -348,4 +348,4 @@ const s = StyleSheet.create({
   tipIcon: { fontSize: 22, width: 30, textAlign: 'center' },
   tipHead: { fontSize: 13, color: colors.text, fontWeight: '600', marginBottom: 2 },
   tipText: { fontSize: 12, color: colors.textSec, lineHeight: 18 },
-});
+}));

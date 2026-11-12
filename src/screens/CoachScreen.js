@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -17,7 +16,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../context/AppContext';
 import { streamChatMessage } from '../services/anthropicService';
 import { colors } from '../theme/colors';
+import { themedStyles } from '../theme/themed';
 import { daysBetweenLocalDateKeys, toLocalDateKey } from '../utils/date';
+import { getPlanForDate } from '../utils/workoutGenerator';
+import { getActiveTrip, getActiveDeload } from '../utils/recovery';
 
 const QUICK_PROMPTS = [
   "What's my workout today?",
@@ -36,7 +38,7 @@ const SUGGESTION_CARDS = [
   { icon: 'trending-up-outline', text: "Am I making progress?" },
 ];
 
-function buildWelcomeMessage(profile, progress) {
+function buildWelcomeMessage(profile, progress, trips) {
   if (!profile?.name) {
     return "Hey! I'm your personal fitness coach.\n\nTell me about yourself and I'll put together a plan that actually fits your life. What are you working towards?";
   }
@@ -48,6 +50,11 @@ function buildWelcomeMessage(profile, progress) {
     ? daysBetweenLocalDateKeys(lastWorkout.date, today)
     : null;
   const todayLogged = sorted.some(w => w.date === today);
+
+  const trip = getActiveTrip(trips, today);
+  if (trip) {
+    return `Hey ${profile.name} — enjoy the trip. 🧳\n\nYour programme is paused until you're back, so nothing is slipping. Short sessions and plenty of walking is all we need. What can I help with?`;
+  }
 
   if (daysSinceLast !== null && daysSinceLast >= 7) {
     return `${profile.name} — you haven't logged a session in ${daysSinceLast} days.\n\nI'm not going to skip past that. What's been going on? Let's talk about it and get you back to just one session this week.`;
@@ -73,7 +80,7 @@ export default function CoachScreen({ navigation }) {
 
   const WELCOME_MESSAGE = {
     role: 'assistant',
-    content: buildWelcomeMessage(state.userProfile, state.progress),
+    content: buildWelcomeMessage(state.userProfile, state.progress, state.trips),
     id: 'welcome',
   };
 
@@ -117,7 +124,7 @@ export default function CoachScreen({ navigation }) {
       allMessages,
       state.apiKey,
       state.userProfile,
-      state.generatedPlan,
+      getPlanForDate(state, toLocalDateKey()),
       state.progress,
       (chunk) => {
         fullText += chunk;
@@ -133,6 +140,11 @@ export default function CoachScreen({ navigation }) {
         Alert.alert('Error', err.message || 'Something went wrong. Check your API key in Settings.');
         setStreamingText('');
         setIsStreaming(false);
+      },
+      {
+        trip: getActiveTrip(state.trips, toLocalDateKey()),
+        deload: getActiveDeload(state.deloads, toLocalDateKey()),
+        deloadMode: state.deloadMode || 'adaptive',
       },
     );
   }
@@ -293,7 +305,7 @@ function TypingIndicator() {
   );
 }
 
-const s = StyleSheet.create({
+const s = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
@@ -314,7 +326,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { fontSize: 16, color: colors.text, fontWeight: '700' },
-  headerSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  headerSub: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   clearBtn: {
     width: 34,
     height: 34,
@@ -347,13 +359,13 @@ const s = StyleSheet.create({
   coachAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
-  coachAvatarText: { fontSize: 9, color: colors.onAccent, fontWeight: '700' },
+  coachAvatarText: { fontSize: 10, color: colors.onAccent, fontWeight: '700' },
   bubble: {
     maxWidth: '80%',
     borderRadius: 18,
@@ -416,11 +428,11 @@ const s = StyleSheet.create({
   suggestionCard: {
     width: '47%',
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 18,
     padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'flex-start',
   },
   suggestionCardText: { fontSize: 13, color: colors.text, lineHeight: 18, fontWeight: '500' },
-});
+}));
